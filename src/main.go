@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 )
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
@@ -13,9 +16,18 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// Load environment variables from the base directory's .env file
+	err := godotenv.Load(".env") 
+	if err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
+
+	// Get port from environment variable
+	port := os.Getenv("PORT")
+	
 	r := mux.NewRouter()
 	r.HandleFunc("/", homeHandler).Methods("GET")
 
-	fmt.Println("Server running on port 8080...")
-	log.Fatal(http.ListenAndServe(":8080", r))
+	fmt.Printf("Server running on port %s...\n", port)
+	log.Fatal(http.ListenAndServe(":"+port, r))
 }

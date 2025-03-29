@@ -40,7 +40,7 @@ This project is a high-performance ride-sharing backend designed for scalability
 ## 🛠️ Installation & Setup
 ### 1️⃣ Clone the Repository
 ```bash
-git clone https://github.com/yourusername/ride-sharing-backend.git
+git clone https://github.com/hellomukama/ride-sharing-backend.git
 cd ride-sharing-backend
 ```
 ### 2️⃣ Set Up Environment Variables

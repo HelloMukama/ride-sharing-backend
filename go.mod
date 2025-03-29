@@ -9,6 +9,7 @@ require (
 	github.com/go-resty/resty/v2 v2.16.5 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/mmcloughlin/geohash v0.10.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
 )
