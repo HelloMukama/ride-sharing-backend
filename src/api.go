@@ -53,7 +53,7 @@ func cacheLocation(driverID string, loc *GeoLocationAPIResponse) error {
 		return err
 	}
 	
-	return redisClient.SetEX(ctx, fmt.Sprintf("driver_loc:%s", driverID), data, locationCacheTTL).Err()
+	return redisClient.SetEx(ctx, fmt.Sprintf("driver_loc:%s", driverID), data, locationCacheTTL).Err()
 }
 
 func getCachedLocation(driverID string) (*GeoLocationAPIResponse, error) {

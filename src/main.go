@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -51,76 +50,53 @@ func initRateLimiter() {
 }
 
 func main() {
-	// Initialize colored output
-	success := color.New(color.FgGreen).SprintFunc()
-	highlight := color.New(color.FgCyan).SprintFunc()
+    // Initialize colored output
+    success := color.New(color.FgGreen).SprintFunc()
+    highlight := color.New(color.FgCyan).SprintFunc()
 
-	// Clear terminal screen
-	clearScreen()
+    // Clear terminal screen
+    clearScreen()
 
-	// 1. Load environment variables
-	if err := loadEnvFiles(); err != nil {
-		log.Fatal(color.RedString("Error loading environment: %v", err))
-	}
+    // 1. Load environment variables FIRST
+    if err := loadEnvFiles(); err != nil {
+        log.Fatal(color.RedString("Error loading environment: %v", err))
+    }
 
-	// 2. Initialize Redis connection FIRST
-	if err := InitRedis(); err != nil {
-		log.Fatal(color.RedString("Failed to connect to Redis: %v", err))
-	}
-	log.Println(success("✓ Redis connection established"))
+    // 2. Initialize auth system IMMEDIATELY with forced validation
+    if len(os.Getenv("JWT_SECRET")) < 32 {
+        log.Fatal("JWT_SECRET must be at least 32 characters")
+    }
+    if err := initAuth(); err != nil {
+        log.Fatal(color.RedString("Auth initialization failed: %v", err))
+    }
 
-	// 3. Initialize database connection with retries
-	_, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
+    // 3. Initialize Redis
+    if err := InitRedis(); err != nil {
+        log.Fatal(color.RedString("Redis initialization failed: %v", err))
+    }
 
-	var dbErr error
-	for i := 0; i < 5; i++ {
-		if dbErr = InitDB(); dbErr == nil {
-			break
-		}
-		log.Printf("Database connection attempt %d failed: %v", i+1, dbErr)
-		time.Sleep(5 * time.Second)
-	}
-	if dbErr != nil {
-		log.Fatal(color.RedString("Database connection failed after retries: %v", dbErr))
-	}
-	log.Println(success("✓ Database connection established"))
+    // 4. Initialize database
+    if err := InitDB(); err != nil {
+        log.Fatal(color.RedString("Database initialization failed: %v", err))
+    }
 
-	// 4. Initialize auth system AFTER Redis
-	if err := initAuth(); err != nil {
-		log.Fatal(color.RedString("Auth initialization failed: %v", err))
-	}
+    // 5. Initialize rate limiter
+    initRateLimiter()
 
-	// 5. Initialize rate limiter
-	initRateLimiter()
+    // 6. Create and configure router
+    r := configureRouter()
 
-	// 6. Create and configure router
-	r := configureRouter()
+    // 7. Start server
+    port := getPort()
+    server := &http.Server{
+        Addr:         ":" + port,
+        Handler:      r,
+        ReadTimeout:  10 * time.Second,
+        WriteTimeout: 30 * time.Second,
+    }
 
-	// 7. Start server
-	port := getPort()
-	server := &http.Server{
-		Addr:         ":" + port,
-		Handler:      r,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-	}
-
-	log.Printf(success("Server starting on port %s..."), highlight(port))
-	log.Println(success("┌──────────────────────────────────────────────────────────────┐"))
-	log.Println(success("│                      API Endpoints                           │"))
-	log.Println(success("│──────────────────────────────────────────────────────────────│"))
-	log.Println(success("│ Method  │ Endpoint         │ Description                     │"))
-	log.Println(success("├─────────┼──────────────────┼─────────────────────────────────┤"))
-	log.Println(success("│ POST    │ /auth/login      │ User authentication (JWT)       │"))
-	log.Println(success("│ POST    │ /request-ride    │ Request a ride, match driver    │"))
-	log.Println(success("│ GET     │ /drivers         │ List available drivers          │"))
-	log.Println(success("│ GET     │ /ride-status/:id │ Track an ongoing ride           │"))
-	log.Println(success("│ GET     │ /ws              │ WebSocket connection            │"))
-	log.Println(success("│ GET     │ /metrics         │ Prometheus metrics              │"))
-	log.Println(success("└─────────┴──────────────────┴─────────────────────────────────┘"))
-
-	log.Fatal(server.ListenAndServe())
+    log.Printf(success("Server starting on port %s..."), highlight(port))
+    log.Fatal(server.ListenAndServe())
 }
 
 func clearScreen() {

@@ -4,9 +4,7 @@ go 1.24
 
 require (
 	github.com/fatih/color v1.18.0
-	github.com/go-redis/redis/v8 v8.11.5
 	github.com/golang-jwt/jwt/v5 v5.2.2
-	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.7.4
@@ -15,12 +13,6 @@ require (
 	github.com/redis/go-redis/v9 v9.0.4
 	github.com/ulule/limiter/v3 v3.11.2
 	golang.org/x/net v0.38.0
-)
-
-// redis9 raising issues with docker deployment. excluded.
-exclude (
-	github.com/go-redis/redis/v9 v9.0.0
-	github.com/redis/go-redis/v9 v9.0.0
 )
 
 require (
