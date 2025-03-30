@@ -1,62 +1,62 @@
 package main
 
 import (
-	"encoding/json"
-	"log"
-	"net/http"
-	"strings"
-    "context" // Add this
-
-	"github.com/gorilla/mux"
+    "encoding/json"
+    "log"
+    "net/http"
+    "strings"
+    "context"
+    "time"
+    "github.com/gorilla/mux"
 )
 
 type RideRequest struct {
-	Lat float64 `json:"lat"`
-	Lng float64 `json:"lng"`
+    Lat float64 `json:"lat"`
+    Lng float64 `json:"lng"`
 }
 
 type RideResponse struct {
-	Success bool        `json:"success"`
-	Data    interface{} `json:"data,omitempty"`
-	Message string      `json:"message,omitempty"`
-	Error   string      `json:"error,omitempty"`
+    Success bool        `json:"success"`
+    Data    interface{} `json:"data,omitempty"`
+    Message string      `json:"message,omitempty"`
+    Error   string      `json:"error,omitempty"`
 }
 
 type Driver struct {
-	ID    string  `json:"id"`
-	Lat   float64 `json:"lat"`
-	Lng   float64 `json:"lng"`
-	Dist  float64 `json:"dist"`
+    ID    string  `json:"id"`
+    Lat   float64 `json:"lat"`
+    Lng   float64 `json:"lng"`
+    Dist  float64 `json:"dist"`
 }
 
 func rideStatusHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	rideID := vars["id"]
+    vars := mux.Vars(r)
+    rideID := vars["id"]
 
-	claims, ok := r.Context().Value("userClaims").(*Claims)
-	if !ok {
-		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid auth claims"})
-		return
-	}
+    claims, ok := r.Context().Value("userClaims").(*Claims)
+    if !ok {
+        respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid auth claims"})
+        return
+    }
 
-	var status RideStatus
-	err := dbPool.QueryRow(context.Background(),
-		`SELECT id, driver_id, rider_id, status, created_at, updated_at
-		 FROM rides WHERE id = $1 AND (rider_id = $2 OR driver_id = $3)`,
-		rideID, claims.UserID, claims.Username).Scan(
-		&status.ID, &status.DriverID, &status.RiderID,
-		&status.Status, &status.CreatedAt, &status.UpdatedAt)
+    var status RideStatus
+    err := dbPool.QueryRow(context.Background(),
+        `SELECT id, driver_id, rider_id, status, created_at, updated_at
+         FROM rides WHERE id = $1 AND (rider_id = $2 OR driver_id = $3)`,
+        rideID, claims.UserID, claims.Username).Scan(
+        &status.ID, &status.DriverID, &status.RiderID,
+        &status.Status, &status.CreatedAt, &status.UpdatedAt)
 
-	if err != nil {
-		respondJSON(w, http.StatusNotFound, map[string]string{"error": "ride not found"})
-		return
-	}
+    if err != nil {
+        respondJSON(w, http.StatusNotFound, map[string]string{"error": "ride not found"})
+        return
+    }
 
-	respondJSON(w, http.StatusOK, status)
+    respondJSON(w, http.StatusOK, status)
 }
 
 func requestRideHandler(w http.ResponseWriter, r *http.Request) {
-    // Authentication and validation (unchanged)
+    // Authentication and validation
     authHeader := r.Header.Get("Authorization")
     if authHeader == "" {
         respondJSON(w, http.StatusUnauthorized, RideResponse{
@@ -107,7 +107,7 @@ func requestRideHandler(w http.ResponseWriter, r *http.Request) {
     }
     defer tx.Rollback(ctx)
 
-    // Find nearest available driver using PostGIS
+    // Find nearest available driver
     var driverID string
     err = tx.QueryRow(ctx,
         `UPDATE drivers 
@@ -131,7 +131,7 @@ func requestRideHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Create ride record in PostgreSQL
+    // Create ride record
     var rideID string
     err = tx.QueryRow(ctx,
         `INSERT INTO rides (driver_id, rider_id, status, start_location)
@@ -148,6 +148,27 @@ func requestRideHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    // Create notification
+    notification := map[string]interface{}{
+        "type":     "new_ride",
+        "ride_id":  rideID,
+        "rider_id": claims.UserID,
+        "location": map[string]float64{
+            "lat": req.Lat,
+            "lng": req.Lng,
+        },
+        "time": time.Now().Unix(),
+    }
+
+    // Store notification in DB
+    _, err = tx.Exec(ctx,
+        `INSERT INTO driver_notifications (driver_id, ride_id, status)
+         VALUES ($1, $2, 'pending')`,
+        driverID, rideID)
+    if err != nil {
+        log.Printf("Failed to store notification: %v", err)
+    }
+
     // Commit transaction
     if err := tx.Commit(ctx); err != nil {
         log.Printf("Transaction commit failed: %v", err)
@@ -158,10 +179,9 @@ func requestRideHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Real-time notification via WebSocket (Bonus feature)
-    if err := NotifyDriver(driverID, rideID); err != nil {
+    // Send real-time notification
+    if err := NotifyDriver(driverID, notification); err != nil {
         log.Printf("WebSocket notification failed: %v", err)
-        // Continue since this is a bonus feature
     }
 
     respondJSON(w, http.StatusOK, RideResponse{

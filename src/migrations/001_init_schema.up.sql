@@ -83,3 +83,14 @@ INSERT INTO rides (driver_id, rider_id, status, start_location, end_location) VA
 ('driver6', 1010, 'in_progress',
  ST_SetSRID(ST_MakePoint(32.5780, 0.3150), 4326),
  NULL);
+
+CREATE TABLE driver_notifications (
+    id SERIAL PRIMARY KEY,
+    driver_id VARCHAR(255) NOT NULL REFERENCES drivers(driver_id),
+    ride_id UUID NOT NULL REFERENCES rides(id),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_notifications_driver ON driver_notifications(driver_id, status);

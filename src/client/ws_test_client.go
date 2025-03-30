@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/url"
 	"os"
@@ -11,7 +12,7 @@ import (
 func runWebSocketTest(driverID string) {
 	u := url.URL{
 		Scheme:   "ws",
-		Host:     "app:8080",  // Changed from localhost to app (Docker service name)
+		Host:     "app:8080",
 		Path:     "/ws",
 		RawQuery: "driver_id=" + driverID,
 	}
@@ -25,6 +26,7 @@ func runWebSocketTest(driverID string) {
 
 	done := make(chan struct{})
 
+	// Message handler
 	go func() {
 		defer close(done)
 		for {
@@ -33,11 +35,29 @@ func runWebSocketTest(driverID string) {
 				log.Println("read:", err)
 				return
 			}
-			log.Printf("received: %s", message)
+			
+			var msg map[string]interface{}
+			if err := json.Unmarshal(message, &msg); err != nil {
+				log.Printf("Invalid message: %s", message)
+				continue
+			}
+			
+			switch msg["type"] {
+			case "new_ride", "pending_ride":
+				log.Printf("NEW RIDE ASSIGNED: %+v", msg)
+				// Auto-accept for testing
+				c.WriteJSON(map[string]string{
+					"action":  "accept",
+					"ride_id": msg["ride_id"].(string),
+				})
+			default:
+				log.Printf("received: %s", message)
+			}
 		}
 	}()
 
-	ticker := time.NewTicker(time.Second)
+	// Heartbeat
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -45,14 +65,11 @@ func runWebSocketTest(driverID string) {
 		case <-done:
 			return
 		case t := <-ticker.C:
-			err := c.WriteMessage(websocket.TextMessage, []byte(t.String()))
+			err := c.WriteMessage(websocket.TextMessage, []byte(`{"type":"heartbeat","time":"`+t.String()+`"}`))
 			if err != nil {
 				log.Println("write:", err)
 				return
 			}
-		case <-time.After(5 * time.Second):
-			log.Println("Connection timeout")
-			return
 		}
 	}
 }
