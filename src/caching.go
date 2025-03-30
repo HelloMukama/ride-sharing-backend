@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"time"
@@ -65,6 +64,7 @@ func FindNearbyDrivers(lat, lng, radius float64) ([]string, error) {
 	return driverIDs, nil
 }
 
+// OpenStreetMap implementation
 func ReverseGeocode(lat, lng float64) (string, error) {
 	url := fmt.Sprintf("https://nominatim.openstreetmap.org/reverse?format=json&lat=%f&lon=%f", lat, lng)
 	resp, err := http.Get(url)
