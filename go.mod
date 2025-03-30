@@ -19,8 +19,8 @@ require (
 
 // redis9 raising issues with docker deployment. excluded.
 exclude (
-    github.com/redis/go-redis/v9 v9.0.0
-    github.com/go-redis/redis/v9 v9.0.0
+	github.com/go-redis/redis/v9 v9.0.0
+	github.com/redis/go-redis/v9 v9.0.0
 )
 
 require (
