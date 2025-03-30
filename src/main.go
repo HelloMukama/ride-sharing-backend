@@ -136,22 +136,28 @@ func clearScreen() {
 
 func loadEnvFiles() error {
 	envFiles := []string{
+		os.Getenv("ENV_FILE"),
+		"/app/.env",
 		".env",
-		"../.env",
-		"config/.env",
 	}
-
+	
 	for _, file := range envFiles {
-		if err := godotenv.Load(file); err == nil {
-			log.Printf("Loaded environment from %s", file)
+		if file == "" {
+			continue
+		}
+		err := godotenv.Load(file)
+		if err == nil {
+			log.Printf("Successfully loaded environment from: %s", file)
 			return nil
 		}
+		log.Printf("Attempt failed for %s: %v", file, err)
 	}
-	return fmt.Errorf("no valid .env file found (tried: %v)", envFiles)
+	return fmt.Errorf("failed to load .env from any location (tried: %v)", envFiles)
 }
 
 func configureRouter() *mux.Router {
 	r := mux.NewRouter()
+	SetupAuthRoutes(r)
 
 	// Metrics endpoint
 	r.Handle("/metrics", promhttp.Handler())
