@@ -65,6 +65,8 @@ curl -X POST http://localhost:8080/auth/logout -H "Authorization: Bearer $TOKEN"
 
 
 
+curl -X POST http://localhost:8080/auth/logout -H "Authorization: Bearer $TOKEN"
+how do we implement this? do we have to add some sort of a function inside some file?
 
 
 
@@ -85,7 +87,45 @@ curl -X POST http://localhost:8080/auth/logout -H "Authorization: Bearer $TOKEN"
 
 
 
-curl -X POST http://localhost:8080/request-ride -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMjMsInVzZXJuYW1lIjoidGVzdHVzZXIiLCJyb2xlIjoicmlkZXIiLCJ2ZXJzaW9uIjoxLCJpc3MiOiJyaWRlLXNoYXJpbmctYmFja2VuZCIsImV4cCI6MTc0MzM3MTY3Nn0.tA7dG_MWkBt7PkZ-4S9umF4e1MH41tRKm_RKZBJ9hkw" -H "Content-Type: application/json" -d '{"lat":0.3135, "lng":32.5811}'
+
+
+
+
+
+
+
+
+
+
+
+
+
+TESTING THE WEBSOCKET
+
+
+open  another terminal.
+
+Note that this will show notifications to the drivers who are available
+
+forexample after querryign available drivers
+and say driver2 is among,
+
+
+request a ride from one of the terminals.
+
+then, in a second terminal,
+
+run this
+
+
+docker-compose exec app /ws_test_client driver1
+wont bring an notification.
+
+docker-compose exec app /ws_test_client driver2
+will pop a notification.
+
+
+
 
 
 

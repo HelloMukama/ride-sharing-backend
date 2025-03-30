@@ -11,7 +11,7 @@ import (
 func runWebSocketTest(driverID string) {
 	u := url.URL{
 		Scheme:   "ws",
-		Host:     "localhost:8080",
+		Host:     "app:8080",  // Changed from localhost to app (Docker service name)
 		Path:     "/ws",
 		RawQuery: "driver_id=" + driverID,
 	}
@@ -50,13 +50,16 @@ func runWebSocketTest(driverID string) {
 				log.Println("write:", err)
 				return
 			}
+		case <-time.After(5 * time.Second):
+			log.Println("Connection timeout")
+			return
 		}
 	}
 }
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatal("Usage: go run ws_test_client.go <driver_id>")
+		log.Fatal("Usage: /ws_test_client <driver_id>")
 	}
 	runWebSocketTest(os.Args[1])
 }
