@@ -10,7 +10,7 @@ services:
       - DATABASE_URL=postgres://rideuser:ride123@db:5432/rides?sslmode=disable
       - JWT_SECRET=${JWT_SECRET}
       - PORT=8080
-      - ENV_FILE=/app/.env  # Add this environment variable
+      - ENV_FILE=/app/.env
     depends_on:
       redis:
         condition: service_healthy
@@ -18,8 +18,8 @@ services:
         condition: service_healthy
     volumes:
       - .:/app
-      - ./src:/app/src  # Add this line
-      - ./.env:/app/.env  # Add this explicit mount
+      - ./src:/app/src
+      - ./.env:/app/.env
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval: 10s

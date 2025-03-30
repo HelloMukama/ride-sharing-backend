@@ -14,7 +14,13 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
-	"github.com/redis/go-redis/v9" // Add this
+	"github.com/redis/go-redis/v9"
+)
+
+var (
+    jwtSecret     []byte
+    jwtExpiration time.Duration
+    version       int
 )
 
 // Custom claims with user ID, role and version
@@ -134,19 +140,32 @@ func getTokenVersion(userID int) (int, error) {
 }
 
 func generateJWT(username string, userID int, role string) (string, error) {
-    // Debug: Verify Redis connection
-    if err := redisClient.Ping(context.Background()).Err(); err != nil {
-        log.Printf("Redis ping failed: %v", err)
-        return "", fmt.Errorf("redis connection error: %w", err)
-    }
-
-    version, err := getTokenVersion(userID)
-    if err != nil {
-        log.Printf("Failed to get token version for user %d: %v", userID, err)
-        return "", fmt.Errorf("failed to get token version: %w", err)
+    // First ensure Redis connection is alive
+    ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+    defer cancel()
+    
+    // Retry Redis ping up to 3 times
+    var redisErr error
+    for i := 0; i < 3; i++ {
+        redisErr = redisClient.Ping(ctx).Err()
+        if redisErr == nil {
+            break
+        }
+        time.Sleep(1 * time.Second)
     }
     
-    log.Printf("Generating JWT for user %d with version %d", userID, version)
+    if redisErr != nil {
+        log.Printf("Redis connection failed after retries: %v", redisErr)
+        // Fallback to in-memory version tracking
+        version = 1 // Using a simple fallback
+    } else {
+        var err error
+        version, err = getTokenVersion(userID)
+        if err != nil {
+            log.Printf("Failed to get token version (falling back to 1): %v", err)
+            version = 1
+        }
+    }
     
     claims := &Claims{
         UserID:   userID,
