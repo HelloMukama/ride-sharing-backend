@@ -96,20 +96,20 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
-	claims, ok := r.Context().Value("userClaims").(*Claims)
-	if !ok {
-		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid token"})
-		return
-	}
+    claims, ok := r.Context().Value("userClaims").(*Claims)
+    if !ok {
+        respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid token"})
+        return
+    }
 
-	// Invalidate all previous tokens by incrementing version
-	_, err := incrementTokenVersion(claims.UserID)
-	if err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Logout failed"})
-		return
-	}
+    // Only increment version on explicit logout
+    _, err := incrementTokenVersion(claims.UserID)
+    if err != nil {
+        respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Logout failed"})
+        return
+    }
 
-	respondJSON(w, http.StatusOK, map[string]string{"status": "logged out"})
+    respondJSON(w, http.StatusOK, map[string]string{"status": "logged out"})
 }
 
 func incrementTokenVersion(userID int) (int, error) {
@@ -124,33 +124,35 @@ func incrementTokenVersion(userID int) (int, error) {
 }
 
 func getTokenVersion(userID int) (int, error) {
-	ctx := context.Background()
-	ver, err := redisClient.Get(ctx, tokenVersionPrefix+strconv.Itoa(userID)).Int()
-	if err == redis.Nil {
-		return 0, nil // First token
-	}
-	return ver, err
+    ctx := context.Background()
+    ver, err := redisClient.Get(ctx, tokenVersionPrefix+strconv.Itoa(userID)).Int()
+    if err == redis.Nil {
+        // Return 1 instead of 0 for new users
+        return 1, nil
+    }
+    return ver, err
 }
 
 func generateJWT(username string, userID int, role string) (string, error) {
-	version, err := incrementTokenVersion(userID)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate token version: %w", err)
-	}
+    // Only increment version if this is NOT a new token generation
+    version, err := getTokenVersion(userID)
+    if err != nil {
+        return "", fmt.Errorf("failed to get token version: %w", err)
+    }
+    
+    claims := &Claims{
+        UserID:   userID,
+        Username: username,
+        Role:     role,
+        Version:  version,
+        RegisteredClaims: jwt.RegisteredClaims{
+            ExpiresAt: jwt.NewNumericDate(time.Now().Add(jwtExpiration)),
+            Issuer:    "ride-sharing-backend",
+        },
+    }
 
-	claims := &Claims{
-		UserID:   userID,
-		Username: username,
-		Role:     role,
-		Version:  version,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(jwtExpiration)),
-			Issuer:    "ride-sharing-backend",
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtSecret)
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    return token.SignedString(jwtSecret)
 }
 
 func AuthMiddleware(next http.Handler) http.Handler {

@@ -148,7 +148,7 @@ func requestRideHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Create notification
+    // Create notification payload
     notification := map[string]interface{}{
         "type":     "new_ride",
         "ride_id":  rideID,
@@ -157,16 +157,17 @@ func requestRideHandler(w http.ResponseWriter, r *http.Request) {
             "lat": req.Lat,
             "lng": req.Lng,
         },
-        "time": time.Now().Unix(),
+        "time":     time.Now().Unix(),
     }
 
-    // Store notification in DB
+    // Store notification in DB (within same transaction)
     _, err = tx.Exec(ctx,
         `INSERT INTO driver_notifications (driver_id, ride_id, status)
          VALUES ($1, $2, 'pending')`,
         driverID, rideID)
     if err != nil {
         log.Printf("Failed to store notification: %v", err)
+        // Continue despite notification failure
     }
 
     // Commit transaction
@@ -179,10 +180,13 @@ func requestRideHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Send real-time notification
-    if err := NotifyDriver(driverID, notification); err != nil {
-        log.Printf("WebSocket notification failed: %v", err)
-    }
+    // Send real-time notification (non-blocking)
+    go func() {
+        if err := NotifyDriver(driverID, notification); err != nil {
+            log.Printf("WebSocket notification failed: %v", err)
+            // Notification failures shouldn't fail the request
+        }
+    }()
 
     respondJSON(w, http.StatusOK, RideResponse{
         Success: true,

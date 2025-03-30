@@ -26,7 +26,6 @@ func runWebSocketTest(driverID string) {
 
 	done := make(chan struct{})
 
-	// Message handler
 	go func() {
 		defer close(done)
 		for {
@@ -56,7 +55,6 @@ func runWebSocketTest(driverID string) {
 		}
 	}()
 
-	// Heartbeat
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
