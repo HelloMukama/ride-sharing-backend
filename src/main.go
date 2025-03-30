@@ -44,24 +44,30 @@ func main() {
 		log.Fatal(color.RedString("Error loading environment: %v", err))
 	}
 
-	// 2. Initialize auth system
-	if err := initAuth(); err != nil {
-		log.Fatal(color.RedString("Auth initialization failed: %v", err))
-	}
-
-	// 3. Initialize Redis connection
+	// 2. Initialize Redis connection FIRST
 	if err := InitRedis(); err != nil {
 		log.Fatal(color.RedString("Failed to connect to Redis: %v", err))
 	}
 	log.Println(success("✓ Redis connection established"))
 
-	// 4. Initialize rate limiter
+	// 3. Initialize database connection
+	if err := InitDB(); err != nil {
+		log.Fatal(color.RedString("Database connection failed: %v", err))
+	}
+	log.Println(success("✓ Database connection established"))
+
+	// 4. Initialize auth system AFTER Redis
+	if err := initAuth(); err != nil {
+		log.Fatal(color.RedString("Auth initialization failed: %v", err))
+	}
+
+	// 5. Initialize rate limiter
 	initRateLimiter()
 
-	// 5. Create and configure router
+	// 6. Create and configure router
 	r := configureRouter()
 
-	// 6. Start server
+	// 7. Start server
 	port := getPort()
 	server := &http.Server{
 		Addr:         ":" + port,
@@ -80,6 +86,7 @@ func main() {
 	log.Println(success("│ POST    │ /request-ride    │ Request a ride, match driver    │"))
 	log.Println(success("│ GET     │ /drivers         │ List available drivers          │"))
 	log.Println(success("│ GET     │ /ride-status/:id │ Track an ongoing ride           │"))
+	log.Println(success("│ GET     │ /ws              │ WebSocket connection            │"))
 	log.Println(success("└─────────┴──────────────────┴─────────────────────────────────┘"))
 		
 	log.Fatal(server.ListenAndServe())
@@ -117,6 +124,9 @@ func configureRouter() *mux.Router {
 
 	// Metrics endpoint
 	r.Handle("/metrics", promhttp.Handler())
+
+    // Add WebSocket endpoint
+    r.HandleFunc("/ws", WSHandler)
 
 	// API Documentation Route
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

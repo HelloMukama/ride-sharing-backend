@@ -57,3 +57,5 @@ ehthumbs.db
 # Go workspace file
 go.work
 
+test.go
+

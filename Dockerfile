@@ -2,27 +2,32 @@
 FROM golang:1.24.1 as builder
 
 WORKDIR /app
+
+# 1. Copy module files first for better caching
 COPY go.mod go.sum ./
+
+# 2. Download dependencies
 RUN go mod download
+
+# 3. Copy source code
 COPY src/ src/
 
-# Build to absolute path in builder
-RUN CGO_ENABLED=0 GOOS=linux go build -o /usr/local/bin/ride-sharing-backend ./...
+# 4. Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -o /ride-sharing-backend ./src
 
 # ==================== RUNTIME STAGE ====================
 FROM alpine:latest
 
-# 1. Install dependencies first (better layer caching)
+# 1. Install dependencies
 RUN apk add --no-cache ca-certificates
 
-# 2. Copy binary from standard Unix binary location
-COPY --from=builder /usr/local/bin/ride-sharing-backend /usr/local/bin/
+# 2. Copy binary
+COPY --from=builder /ride-sharing-backend /
 
-# 3. Create app directory and copy env
-WORKDIR /app
+# 3. Copy configuration files
 COPY .env .
+COPY config.env .
 
+# 4. Expose and run
 EXPOSE 8080
-
-# 4. Use absolute path to binary
-CMD ["/usr/local/bin/ride-sharing-backend"]
+CMD ["/ride-sharing-backend"]
