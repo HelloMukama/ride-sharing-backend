@@ -134,11 +134,19 @@ func getTokenVersion(userID int) (int, error) {
 }
 
 func generateJWT(username string, userID int, role string) (string, error) {
-    // Only increment version if this is NOT a new token generation
+    // Debug: Verify Redis connection
+    if err := redisClient.Ping(context.Background()).Err(); err != nil {
+        log.Printf("Redis ping failed: %v", err)
+        return "", fmt.Errorf("redis connection error: %w", err)
+    }
+
     version, err := getTokenVersion(userID)
     if err != nil {
+        log.Printf("Failed to get token version for user %d: %v", userID, err)
         return "", fmt.Errorf("failed to get token version: %w", err)
     }
+    
+    log.Printf("Generating JWT for user %d with version %d", userID, version)
     
     claims := &Claims{
         UserID:   userID,

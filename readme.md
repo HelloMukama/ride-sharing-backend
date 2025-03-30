@@ -1,53 +1,38 @@
-# Ride Sharing Backend Service
+# Ride-Sharing Service Backend
 
-A high-performance ride-sharing backend designed for scalability and reliability.
+A high-performance ride-sharing backend demonstrating scalable architecture with real-time capabilities.
 
-## Features
+## Features Implemented
 
-- JWT Authentication
-- Redis-based geospatial driver matching
-- Dockerized deployment
-- CI/CD pipeline
+**JWT Authentication**  
+- Token generation/login endpoint
+- Token validation middleware  
+- Automatic token invalidation on logout  
 
-## Running Locally
+**Driver-Rider Matching**  
+- Geospatial queries for nearest drivers  
+- Redis caching of driver locations  
+- Real-time WebSocket notifications  
 
-1. Clone the repository
-2. Set up environment variables in `.env`
-3. Run `docker-compose up --build`
-4. Access the API at `http://localhost:8080`
+**Observability**  
+- Prometheus metrics endpoint  
+- Grafana dashboard integration  
 
-## API Endpoints
+**Deployment**  
+- Docker containerization  
+- PostgreSQL with PostGIS  
+- Redis for caching  
 
-- POST `/auth/login` - Get JWT token
-- POST `/request-ride` - Request a ride
-- GET `/drivers` - List available drivers
+## 🛠 Installation & Setup
 
+```bash
+# 1. Clone repository
+git clone https://github.com/yourusername/ride-sharing-backend.git
+cd ride-sharing-backend
 
+# 2. Setup environment
+cp .env.example .env
+# Edit .env with your configuration
 
-------------------------------
-
-
-## Running the Application
-1. Clone the repository
-2. Run: `docker-compose up`
-3. Access:
-   - App: http://localhost:8080
-   - Grafana: http://localhost:3000
-   - Prometheus: http://localhost:9090
-
-No additional setup required - all dependencies are containerized.
-
-
-
-## Accessing Services
-- Application: http://localhost:8080
-- PostgreSQL: localhost:15432 (user: rideuser, pass: ride123)
-- Redis: localhost:16379
-- Prometheus: http://localhost:9090
-- Grafana: http://localhost:3000 (admin/admin)
-
-
-what's working
-
-jwt login token issued
-invalidation of all existing tokens once a new token is created
+# 3. Start services
+docker-compose up --build
