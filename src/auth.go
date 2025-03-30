@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -48,6 +49,7 @@ func initAuth() error {
 		return errors.New("invalid JWT_EXPIRE format. Examples: 24h, 1h30m")
 	}
 
+	log.Printf("JWT initialized with expiration: %v", jwtExpiration)
 	return nil
 }
 
@@ -56,7 +58,6 @@ func SetupAuthRoutes(r *mux.Router) {
 	r.HandleFunc("/auth/validate", validateTokenHandler).Methods("GET")
 }
 
-// Enhanced login handler with proper request parsing
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	// Rate limiting check
 	ctx, err := appLimiter.Get(r.Context(), r.RemoteAddr)
@@ -72,13 +73,13 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
-		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request"})
 		return
 	}
 
 	tokenString, err := generateJWT(creds.Username, creds.UserID, creds.Role)
 	if err != nil {
-		http.Error(w, `{"error":"Token generation failed"}`, http.StatusInternalServerError)
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Token generation failed"})
 		return
 	}
 
@@ -88,7 +89,6 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Generate token with custom claims
 func generateJWT(username string, userID int, role string) (string, error) {
 	claims := &Claims{
 		UserID:   userID,
@@ -104,7 +104,6 @@ func generateJWT(username string, userID int, role string) (string, error) {
 	return token.SignedString(jwtSecret)
 }
 
-// Middleware for protected routes
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Rate limiting check
@@ -125,7 +124,6 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Split the header to get just the token part
 		authParts := strings.Split(authHeader, " ")
 		if len(authParts) != 2 || authParts[0] != "Bearer" {
 			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid Authorization header format"})
@@ -135,11 +133,11 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		tokenString := authParts[1]
 		claims, err := validateToken(tokenString)
 		if err != nil {
-			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+			log.Printf("Token validation failed: %v", err)
+			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 			return
 		}
 
-		// Add claims to request context
 		ctxWithClaims := context.WithValue(r.Context(), "userClaims", claims)
 		next.ServeHTTP(w, r.WithContext(ctxWithClaims))
 	})
@@ -152,7 +150,6 @@ func validateTokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Split the header to get just the token part
 	authParts := strings.Split(authHeader, " ")
 	if len(authParts) != 2 || authParts[0] != "Bearer" {
 		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid Authorization header format"})
@@ -174,85 +171,54 @@ func validateTokenHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func validateToken(tokenString string) (*Claims, error) {
-    log.Println("\n=== Starting Token Validation ===")
-    log.Printf("Raw Token: %q", tokenString)
-    log.Printf("Current Time: %v", time.Now())
-    log.Printf("JWT Secret: %v", string(jwtSecret))
+	log.Println("\n=== Token Validation ===")
+	log.Printf("Token: %q", tokenString)
+	log.Printf("Current time: %v", time.Now())
 
-    // Verify token structure
-    parts := strings.Split(tokenString, ".")
-    if len(parts) != 3 {
-        log.Println("Invalid token structure - not 3 parts")
-        return nil, errors.New("invalid token format")
-    }
+	parts := strings.Split(tokenString, ".")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("invalid token format")
+	}
 
-    claims := &Claims{}
-    token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-        log.Println("\n=== Inside Verification Function ===")
-        log.Printf("Token Header: %+v", token.Header)
-        
-        // Algorithm check
-        if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-            log.Printf("Unexpected signing method: %v", token.Header["alg"])
-            return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-        }
-        
-        // Token type check
-        if typ, ok := token.Header["typ"].(string); !ok || typ != "JWT" {
-            log.Println("Invalid token type")
-            return nil, errors.New("invalid token type")
-        }
-        
-        log.Println("Returning JWT Secret for verification")
-        return jwtSecret, nil
-    })
+	claims := &Claims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return jwtSecret, nil
+	})
 
-    if err != nil {
-        log.Printf("\n=== Parse Error ===\n%v\n", err)
-        
-        // Check for specific error types
-        if ve, ok := err.(*jwt.ValidationError); ok {
-            if ve.Errors&jwt.ValidationErrorMalformed != 0 {
-                log.Println("Token malformed")
-            }
-            if ve.Errors&jwt.ValidationErrorExpired != 0 {
-                log.Println("Token expired")
-                log.Printf("Expiration Time: %v", claims.ExpiresAt)
-            }
-            if ve.Errors&jwt.ValidationErrorNotValidYet != 0 {
-                log.Println("Token not valid yet")
-            }
-            if ve.Errors&jwt.ValidationErrorSignatureInvalid != 0 {
-                log.Println("Signature validation failed")
-                log.Println("Possible secret mismatch")
-            }
-        }
-        
-        return nil, fmt.Errorf("token parsing failed: %w", err)
-    }
+	if err != nil {
+		var jwtErr *jwt.ValidationError
+		if errors.As(err, &jwtErr) {
+			switch {
+			case jwtErr.Errors&jwt.ValidationErrorMalformed != 0:
+				log.Println("Malformed token")
+			case jwtErr.Errors&jwt.ValidationErrorExpired != 0:
+				log.Println("Expired token")
+			case jwtErr.Errors&jwt.ValidationErrorNotValidYet != 0:
+				log.Println("Token not valid yet")
+			case jwtErr.Errors&jwt.ValidationErrorSignatureInvalid != 0:
+				log.Println("Signature invalid")
+			default:
+				log.Printf("Validation error: %v", jwtErr)
+			}
+		}
+		return nil, fmt.Errorf("token validation failed: %w", err)
+	}
 
-    if !token.Valid {
-        log.Println("\n=== Token Invalid ===")
-        if claims.ExpiresAt != nil {
-            log.Printf("Expiration Status: %v (Now: %v)", 
-                claims.ExpiresAt.Time, time.Now())
-        }
-        log.Printf("Full Claims: %+v", claims)
-        return nil, errors.New("invalid token")
-    }
+	if !token.Valid {
+		return nil, errors.New("invalid token")
+	}
 
-    // Additional claims validation
-    if claims.Issuer != "ride-sharing-backend" {
-        log.Printf("Invalid issuer: %s", claims.Issuer)
-        return nil, errors.New("invalid issuer")
-    }
+	if claims.Issuer != "ride-sharing-backend" {
+		return nil, errors.New("invalid issuer")
+	}
 
-    log.Println("\n=== Token Valid ===")
-    log.Printf("Valid claims: %+v", claims)
-    return claims, nil
+	log.Println("Token validated successfully")
+	return claims, nil
 }
 
-// Helper for JSON responses
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
