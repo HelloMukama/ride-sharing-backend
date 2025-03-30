@@ -23,7 +23,7 @@ A high-performance ride-sharing backend demonstrating scalable architecture with
 - PostgreSQL with PostGIS  
 - Redis for caching  
 
-## 🛠 Installation & Setup
+## Installation & Setup
 
 ```bash
 # 1. Clone repository
@@ -36,3 +36,6 @@ cp .env.example .env
 
 # 3. Start services
 docker-compose up --build
+
+test out with the endpoints
+
