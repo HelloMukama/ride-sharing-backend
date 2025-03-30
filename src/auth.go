@@ -18,11 +18,7 @@ import (
 )
 
 var (
-    jwtSecret     []byte
-    jwtExpiration time.Duration
     version       int
-    redisClient   *redis.Client
-    appLimiter    *limiter.Limiter
 )
 
 // Custom claims with user ID, role and version
