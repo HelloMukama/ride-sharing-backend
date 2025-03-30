@@ -15,6 +15,13 @@ COPY src/ src/
 # 4. Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o /ride-sharing-backend ./src
 
+# 5. In the builder stage (after COPY src/)
+RUN CGO_ENABLED=0 GOOS=linux go build -o /ride-sharing-backend ./src && \
+    go build -o /ws_test_client ./src/client/ws_test_client.go
+
+
+
+
 # ==================== RUNTIME STAGE ====================
 FROM alpine:latest
 
@@ -28,6 +35,9 @@ COPY --from=builder /ride-sharing-backend /
 COPY .env .
 #COPY config.env .  we are using .env in base dir
 
-# 4. Expose and run
+# 4
+COPY --from=builder /ws_test_client /
+
+# 5. Expose and run
 EXPOSE 8080
 CMD ["/ride-sharing-backend"]

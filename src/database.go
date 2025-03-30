@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"time"
-	"log"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -26,12 +26,20 @@ func InitDB() error {
 	config.MaxConns = 25
 	config.MaxConnLifetime = 5 * time.Minute
 
-	dbPool, err = pgxpool.NewWithConfig(context.Background(), config)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	dbPool, err = pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return fmt.Errorf("failed to create connection pool: %w", err)
 	}
 
-	// Verify connection and run migrations
+	// Verify connection
+	if err := dbPool.Ping(ctx); err != nil {
+		return fmt.Errorf("database ping failed: %w", err)
+	}
+
+	// Run migrations
 	if err := verifyAndMigrateDB(); err != nil {
 		return fmt.Errorf("database migration failed: %w", err)
 	}
@@ -44,7 +52,6 @@ func verifyAndMigrateDB() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Check if rides table exists
 	var tableExists bool
 	err := dbPool.QueryRow(ctx,
 		`SELECT EXISTS (
@@ -89,18 +96,15 @@ func runMigrations(ctx context.Context) error {
 	}
 
 	// Create indexes
-	if _, err := tx.Exec(ctx, `
-		CREATE INDEX idx_rides_status ON rides(status)`); err != nil {
+	if _, err := tx.Exec(ctx, `CREATE INDEX idx_rides_status ON rides(status)`); err != nil {
 		return fmt.Errorf("failed to create status index: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, `
-		CREATE INDEX idx_rides_rider_id ON rides(rider_id)`); err != nil {
+	if _, err := tx.Exec(ctx, `CREATE INDEX idx_rides_rider_id ON rides(rider_id)`); err != nil {
 		return fmt.Errorf("failed to create rider_id index: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, `
-		CREATE INDEX idx_rides_driver_id ON rides(driver_id)`); err != nil {
+	if _, err := tx.Exec(ctx, `CREATE INDEX idx_rides_driver_id ON rides(driver_id)`); err != nil {
 		return fmt.Errorf("failed to create driver_id index: %w", err)
 	}
 

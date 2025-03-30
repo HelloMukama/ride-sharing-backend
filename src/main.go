@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -68,9 +69,20 @@ func main() {
 	}
 	log.Println(success("✓ Redis connection established"))
 
-	// 3. Initialize database connection
-	if err := InitDB(); err != nil {
-		log.Fatal(color.RedString("Database connection failed: %v", err))
+	// 3. Initialize database connection with retries
+	_, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	var dbErr error
+	for i := 0; i < 5; i++ {
+		if dbErr = InitDB(); dbErr == nil {
+			break
+		}
+		log.Printf("Database connection attempt %d failed: %v", i+1, dbErr)
+		time.Sleep(5 * time.Second)
+	}
+	if dbErr != nil {
+		log.Fatal(color.RedString("Database connection failed after retries: %v", dbErr))
 	}
 	log.Println(success("✓ Database connection established"))
 

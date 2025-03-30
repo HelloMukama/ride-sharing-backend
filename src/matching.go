@@ -5,12 +5,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
-
     "context" // Add this
-    "fmt" // Add this
-    "time"
 
-    "github.com/google/uuid" // Add this
 	"github.com/gorilla/mux"
 )
 
@@ -98,44 +94,72 @@ func requestRideHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Driver matching with Redis GEO
-    driverIDs, err := FindNearbyDrivers(req.Lat, req.Lng, 5)
+    // Start database transaction
+    ctx := context.Background()
+    tx, err := dbPool.Begin(ctx)
     if err != nil {
-        log.Printf("Driver search error: %v", err)
+        log.Printf("Failed to begin transaction: %v", err)
         respondJSON(w, http.StatusInternalServerError, RideResponse{
             Success: false,
-            Error:   "Driver search temporarily unavailable",
+            Error:   "Internal server error",
+        })
+        return
+    }
+    defer tx.Rollback(ctx)
+
+    // Find nearest available driver using PostGIS
+    var driverID string
+    err = tx.QueryRow(ctx,
+        `UPDATE drivers 
+         SET available = false 
+         WHERE driver_id = (
+             SELECT driver_id 
+             FROM drivers 
+             WHERE available = true
+             ORDER BY current_location <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
+             LIMIT 1
+         )
+         RETURNING driver_id`,
+        req.Lng, req.Lat).Scan(&driverID)
+
+    if err != nil {
+        log.Printf("Driver search failed: %v", err)
+        respondJSON(w, http.StatusNotFound, RideResponse{
+            Success: false,
+            Message: "No available drivers found",
         })
         return
     }
 
-    if len(driverIDs) == 0 {
-        respondJSON(w, http.StatusOK, RideResponse{
+    // Create ride record in PostgreSQL
+    var rideID string
+    err = tx.QueryRow(ctx,
+        `INSERT INTO rides (driver_id, rider_id, status, start_location)
+         VALUES ($1, $2, 'requested', ST_SetSRID(ST_MakePoint($3, $4), 4326))
+         RETURNING id`,
+        driverID, claims.UserID, req.Lng, req.Lat).Scan(&rideID)
+
+    if err != nil {
+        log.Printf("Failed to create ride: %v", err)
+        respondJSON(w, http.StatusInternalServerError, RideResponse{
             Success: false,
-            Message: "No drivers available. Please try again later.",
+            Error:   "Failed to create ride record",
         })
         return
     }
 
-    // Create minimal ride record in Redis (per instructions)
-    rideID := uuid.New().String()
-    err = redisClient.SetEX(context.Background(),
-        fmt.Sprintf("ride:%s", rideID),
-        fmt.Sprintf(`{"driver_id":"%s","rider_id":%d,"status":"accepted"}`, 
-            driverIDs[0], claims.UserID),
-        2*time.Hour).Err()
-
-    if err != nil {
-        log.Printf("Failed to create ride record: %v", err)
+    // Commit transaction
+    if err := tx.Commit(ctx); err != nil {
+        log.Printf("Transaction commit failed: %v", err)
         respondJSON(w, http.StatusInternalServerError, RideResponse{
             Success: false,
-            Error:   "Failed to create ride",
+            Error:   "Failed to complete ride request",
         })
         return
     }
 
     // Real-time notification via WebSocket (Bonus feature)
-    if err := NotifyDriver(driverIDs[0], rideID); err != nil {
+    if err := NotifyDriver(driverID, rideID); err != nil {
         log.Printf("WebSocket notification failed: %v", err)
         // Continue since this is a bonus feature
     }
@@ -144,19 +168,33 @@ func requestRideHandler(w http.ResponseWriter, r *http.Request) {
         Success: true,
         Data: map[string]interface{}{
             "ride_id":   rideID,
-            "driver_id": driverIDs[0],
-            "status":    "accepted",
+            "driver_id": driverID,
+            "status":    "requested",
         },
     })
 }
 
 func listDriversHandler(w http.ResponseWriter, r *http.Request) {
-	// Mock driver data
-	mockDrivers := []Driver{
-		{ID: "driver1", Lat: 0.3135, Lng: 32.5811},
-		{ID: "driver2", Lat: 0.3167, Lng: 32.5825},
-		{ID: "driver3", Lat: 0.3150, Lng: 32.5800},
-	}
+    rows, err := dbPool.Query(r.Context(),
+        `SELECT driver_id, 
+        ST_X(current_location::geometry) as lat, 
+        ST_Y(current_location::geometry) as lng 
+        FROM drivers WHERE available = true`)
+    if err != nil {
+        respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Database error"})
+        return
+    }
+    defer rows.Close()
 
-	respondJSON(w, http.StatusOK, mockDrivers)
+    var drivers []Driver
+    for rows.Next() {
+        var d Driver
+        if err := rows.Scan(&d.ID, &d.Lat, &d.Lng); err != nil {
+            respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Data parsing error"})
+            return
+        }
+        drivers = append(drivers, d)
+    }
+
+    respondJSON(w, http.StatusOK, drivers)
 }
