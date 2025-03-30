@@ -4,7 +4,7 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE TABLE rides (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     driver_id VARCHAR(255) NOT NULL,  -- References drivers.driver_id
-    rider_id INTEGER NOT NULL,        -- References your users/app riders
+    rider_id INTEGER NOT NULL,        -- References users/app riders
     status VARCHAR(50) NOT NULL CHECK (status IN ('requested', 'accepted', 'in_progress', 'completed', 'cancelled')),
     start_location GEOMETRY(POINT, 4326) NOT NULL,  -- WGS84 coordinates
     end_location GEOMETRY(POINT, 4326),             -- WGS84 coordinates
