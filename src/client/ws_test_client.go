@@ -5,12 +5,16 @@ import (
 	"net/url"
 	"os"
 	"time"
-
 	"github.com/gorilla/websocket"
 )
 
 func runWebSocketTest(driverID string) {
-	u := url.URL{Scheme: "ws", Host: "localhost:8080", Path: "/ws", RawQuery: "driver_id=" + driverID}
+	u := url.URL{
+		Scheme:   "ws",
+		Host:     "localhost:8080",
+		Path:     "/ws",
+		RawQuery: "driver_id=" + driverID,
+	}
 	log.Printf("Connecting to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
@@ -33,7 +37,6 @@ func runWebSocketTest(driverID string) {
 		}
 	}()
 
-	// Keep connection alive
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
