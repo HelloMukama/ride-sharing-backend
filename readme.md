@@ -22,3 +22,32 @@ A high-performance ride-sharing backend designed for scalability and reliability
 - POST `/request-ride` - Request a ride
 - GET `/drivers` - List available drivers
 
+
+
+------------------------------
+
+
+## Running the Application
+1. Clone the repository
+2. Run: `docker-compose up`
+3. Access:
+   - App: http://localhost:8080
+   - Grafana: http://localhost:3000
+   - Prometheus: http://localhost:9090
+
+No additional setup required - all dependencies are containerized.
+
+
+
+## Accessing Services
+- Application: http://localhost:8080
+- PostgreSQL: localhost:15432 (user: rideuser, pass: ride123)
+- Redis: localhost:16379
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000 (admin/admin)
+
+
+what's working
+
+jwt login token issued
+invalidation of all existing tokens once a new token is created

@@ -11,28 +11,46 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - PORT=8080
     depends_on:
-      - redis
-      - db
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
     volumes:
       - .:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   db:
-    image: postgres:15
+    image: postgis/postgis:15-3.3
     environment:
       POSTGRES_USER: rideuser
       POSTGRES_PASSWORD: ride123
       POSTGRES_DB: rides
     ports:
-      - "5432:5432"
+      - "15432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./src/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rideuser -d rides"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7
     ports:
-      - "6379:6379"
+      - "16379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   prometheus:
     image: prom/prometheus
@@ -42,6 +60,8 @@ services:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
     depends_on:
       - app
+    networks:
+      - default
 
   grafana:
     image: grafana/grafana
@@ -49,8 +69,11 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
+    volumes:
+      - grafana_data:/var/lib/grafana
 
 volumes:
   redis_data:
   postgres_data:
+  grafana_data:
     

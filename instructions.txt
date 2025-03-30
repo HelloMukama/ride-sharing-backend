@@ -41,3 +41,25 @@ curl -X GET http://localhost:8080/ride-status/123 -H "Authorization: Bearer $TOK
 # 4. Call logout:
 
 curl -X POST http://localhost:8080/auth/logout -H "Authorization: Bearer $TOKEN"
+
+
+
+curl -X POST http://localhost:8080/request-ride -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMjMsInVzZXJuYW1lIjoidGVzdHVzZXIiLCJyb2xlIjoicmlkZXIiLCJ2ZXJzaW9uIjoxLCJpc3MiOiJyaWRlLXNoYXJpbmctYmFja2VuZCIsImV4cCI6MTc0MzM3MTY3Nn0.tA7dG_MWkBt7PkZ-4S9umF4e1MH41tRKm_RKZBJ9hkw" -H "Content-Type: application/json" -d '{"lat":0.3135, "lng":32.5811}'
+
+
+
+
+tried to run with docker and encountered an issue?
+
+# Stop any running containers
+docker-compose down
+
+# Remove unused volumes
+docker volume prune -f
+
+# Rebuild with clean cache
+docker-compose build --no-cache
+
+# Start the services
+docker-compose up
+

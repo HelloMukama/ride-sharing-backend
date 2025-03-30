@@ -14,6 +14,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
+	"github.com/redis/go-redis/v9" // Add this
 )
 
 // Custom claims with user ID, role and version

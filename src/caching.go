@@ -1,8 +1,11 @@
-// src/caching.go
 package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -13,15 +16,14 @@ var redisClient *redis.Client
 
 func InitRedis() error {
 	redisURL := os.Getenv("REDIS_URL")
-    if redisURL == "" {
-        // Fallback to Docker-compatible url if no .env variable is set
-        redisURL = "redis:6379" 
-    }
+	if redisURL == "" {
+		redisURL = "redis:6379"
+	}
 
 	redisClient = redis.NewClient(&redis.Options{
 		Addr:     redisURL,
-		Password: "", // no password set
-		DB:       0,  // use default DB
+		Password: "",
+		DB:       0,
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -41,10 +43,10 @@ func CacheDriverLocation(driverID string, lat, lng float64) error {
 	return redisClient.GeoAdd(ctx, "drivers", geoLocation).Err()
 }
 
-func FindNearbyDrivers(lat, lng float64, radius float64) ([]string, error) {
+func FindNearbyDrivers(lat, lng, radius float64) ([]string, error) {
 	ctx := context.Background()
 	geoRadiusQuery := &redis.GeoRadiusQuery{
-		Radius:    radius, // in kilometers
+		Radius:    radius,
 		Unit:      "km",
 		WithDist:  true,
 		Sort:      "ASC",
@@ -60,6 +62,26 @@ func FindNearbyDrivers(lat, lng float64, radius float64) ([]string, error) {
 	for _, loc := range locations {
 		driverIDs = append(driverIDs, loc.Name)
 	}
-
 	return driverIDs, nil
+}
+
+func ReverseGeocode(lat, lng float64) (string, error) {
+	url := fmt.Sprintf("https://nominatim.openstreetmap.org/reverse?format=json&lat=%f&lon=%f", lat, lng)
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		DisplayName string `json:"display_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	if result.DisplayName == "" {
+		return fmt.Sprintf("Near %.4f, %.4f", lat, lng), nil
+	}
+	return result.DisplayName, nil
 }

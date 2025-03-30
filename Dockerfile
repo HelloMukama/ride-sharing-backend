@@ -26,7 +26,7 @@ COPY --from=builder /ride-sharing-backend /
 
 # 3. Copy configuration files
 COPY .env .
-COPY config.env .
+#COPY config.env .  we are using .env in base dir
 
 # 4. Expose and run
 EXPOSE 8080

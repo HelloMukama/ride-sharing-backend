@@ -13,6 +13,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	ululeLimiter "github.com/ulule/limiter/v3"
 	"github.com/ulule/limiter/v3/drivers/store/memory"
@@ -20,6 +22,22 @@ import (
 
 var (
 	appLimiter *ululeLimiter.Limiter
+	// Prometheus metrics
+	requestsCounter = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ride_sharing_requests_total",
+			Help: "Total API requests",
+		},
+		[]string{"path", "method", "status"},
+	)
+	responseTimeHistogram = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "ride_sharing_response_time_seconds",
+			Help:    "Response time distribution",
+			Buckets: []float64{0.1, 0.5, 1, 2, 5},
+		},
+		[]string{"path", "method"},
+	)
 )
 
 func initRateLimiter() {
@@ -87,8 +105,9 @@ func main() {
 	log.Println(success("│ GET     │ /drivers         │ List available drivers          │"))
 	log.Println(success("│ GET     │ /ride-status/:id │ Track an ongoing ride           │"))
 	log.Println(success("│ GET     │ /ws              │ WebSocket connection            │"))
+	log.Println(success("│ GET     │ /metrics         │ Prometheus metrics              │"))
 	log.Println(success("└─────────┴──────────────────┴─────────────────────────────────┘"))
-		
+
 	log.Fatal(server.ListenAndServe())
 }
 
@@ -125,8 +144,14 @@ func configureRouter() *mux.Router {
 	// Metrics endpoint
 	r.Handle("/metrics", promhttp.Handler())
 
-    // Add WebSocket endpoint
-    r.HandleFunc("/ws", WSHandler)
+	// WebSocket endpoint
+	r.HandleFunc("/ws", WSHandler)
+
+	// Health check endpoint
+	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
 
 	// API Documentation Route
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -139,6 +164,7 @@ func configureRouter() *mux.Router {
 				"list_drivers":  "GET /drivers",
 				"ride_status":   "GET /ride-status/:id",
 				"metrics":       "GET /metrics",
+				"websocket":     "GET /ws?driver_id=DRIVER_ID",
 			},
 		})
 	})
@@ -149,6 +175,7 @@ func configureRouter() *mux.Router {
 	// Ride Management Routes (protected)
 	api := r.PathPrefix("/").Subrouter()
 	api.Use(AuthMiddleware)
+	api.Use(metricsMiddleware)
 	{
 		api.HandleFunc("/request-ride", requestRideHandler).Methods("POST")
 		api.HandleFunc("/drivers", listDriversHandler).Methods("GET")
@@ -156,6 +183,37 @@ func configureRouter() *mux.Router {
 	}
 
 	return r
+}
+
+// metricsMiddleware tracks request metrics
+func metricsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		path := r.URL.Path
+		method := r.Method
+
+		// Wrap response writer to capture status code
+		rw := &responseWriter{w, http.StatusOK}
+		next.ServeHTTP(rw, r)
+
+		// Record metrics
+		duration := time.Since(start).Seconds()
+		status := fmt.Sprintf("%d", rw.status)
+
+		requestsCounter.WithLabelValues(path, method, status).Inc()
+		responseTimeHistogram.WithLabelValues(path, method).Observe(duration)
+	})
+}
+
+// responseWriter wraps http.ResponseWriter to capture status code
+type responseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.status = code
+	rw.ResponseWriter.WriteHeader(code)
 }
 
 func getPort() string {
