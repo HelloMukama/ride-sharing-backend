@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
-	"github.com/ulule/limiter/v3"
 )
 
 // Custom claims with user ID and role
@@ -58,7 +59,7 @@ func SetupAuthRoutes(r *mux.Router) {
 // Enhanced login handler with proper request parsing
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	// Rate limiting check
-	ctx, err := limiter.Get(r.Context(), r.RemoteAddr)
+	ctx, err := appLimiter.Get(r.Context(), r.RemoteAddr)
 	if err != nil || ctx.Reached {
 		respondJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many login attempts"})
 		return
@@ -107,7 +108,7 @@ func generateJWT(username string, userID int, role string) (string, error) {
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Rate limiting check
-		ctx, err := limiter.Get(r.Context(), r.RemoteAddr)
+		ctx, err := appLimiter.Get(r.Context(), r.RemoteAddr)
 		if err != nil {
 			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "rate limit error"})
 			return
@@ -118,12 +119,20 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		tokenString := r.Header.Get("Authorization")
-		if tokenString == "" {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
 			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Authorization header required"})
 			return
 		}
 
+		// Split the header to get just the token part
+		authParts := strings.Split(authHeader, " ")
+		if len(authParts) != 2 || authParts[0] != "Bearer" {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid Authorization header format"})
+			return
+		}
+
+		tokenString := authParts[1]
 		claims, err := validateToken(tokenString)
 		if err != nil {
 			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
@@ -137,13 +146,20 @@ func AuthMiddleware(next http.Handler) http.Handler {
 }
 
 func validateTokenHandler(w http.ResponseWriter, r *http.Request) {
-	tokenString := r.Header.Get("Authorization")
-	if tokenString == "" {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
 		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Missing authorization header"})
 		return
 	}
 
-	claims, err := validateToken(tokenString)
+	// Split the header to get just the token part
+	authParts := strings.Split(authHeader, " ")
+	if len(authParts) != 2 || authParts[0] != "Bearer" {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid Authorization header format"})
+		return
+	}
+
+	claims, err := validateToken(authParts[1])
 	if err != nil {
 		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
 		return
@@ -158,19 +174,82 @@ func validateTokenHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func validateToken(tokenString string) (*Claims, error) {
-	claims := &Claims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
-		}
-		return jwtSecret, nil
-	})
+    log.Println("\n=== Starting Token Validation ===")
+    log.Printf("Raw Token: %q", tokenString)
+    log.Printf("Current Time: %v", time.Now())
+    log.Printf("JWT Secret: %v", string(jwtSecret))
 
-	if err != nil || !token.Valid {
-		return nil, errors.New("invalid token")
-	}
+    // Verify token structure
+    parts := strings.Split(tokenString, ".")
+    if len(parts) != 3 {
+        log.Println("Invalid token structure - not 3 parts")
+        return nil, errors.New("invalid token format")
+    }
 
-	return claims, nil
+    claims := &Claims{}
+    token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+        log.Println("\n=== Inside Verification Function ===")
+        log.Printf("Token Header: %+v", token.Header)
+        
+        // Algorithm check
+        if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+            log.Printf("Unexpected signing method: %v", token.Header["alg"])
+            return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+        }
+        
+        // Token type check
+        if typ, ok := token.Header["typ"].(string); !ok || typ != "JWT" {
+            log.Println("Invalid token type")
+            return nil, errors.New("invalid token type")
+        }
+        
+        log.Println("Returning JWT Secret for verification")
+        return jwtSecret, nil
+    })
+
+    if err != nil {
+        log.Printf("\n=== Parse Error ===\n%v\n", err)
+        
+        // Check for specific error types
+        if ve, ok := err.(*jwt.ValidationError); ok {
+            if ve.Errors&jwt.ValidationErrorMalformed != 0 {
+                log.Println("Token malformed")
+            }
+            if ve.Errors&jwt.ValidationErrorExpired != 0 {
+                log.Println("Token expired")
+                log.Printf("Expiration Time: %v", claims.ExpiresAt)
+            }
+            if ve.Errors&jwt.ValidationErrorNotValidYet != 0 {
+                log.Println("Token not valid yet")
+            }
+            if ve.Errors&jwt.ValidationErrorSignatureInvalid != 0 {
+                log.Println("Signature validation failed")
+                log.Println("Possible secret mismatch")
+            }
+        }
+        
+        return nil, fmt.Errorf("token parsing failed: %w", err)
+    }
+
+    if !token.Valid {
+        log.Println("\n=== Token Invalid ===")
+        if claims.ExpiresAt != nil {
+            log.Printf("Expiration Status: %v (Now: %v)", 
+                claims.ExpiresAt.Time, time.Now())
+        }
+        log.Printf("Full Claims: %+v", claims)
+        return nil, errors.New("invalid token")
+    }
+
+    // Additional claims validation
+    if claims.Issuer != "ride-sharing-backend" {
+        log.Printf("Invalid issuer: %s", claims.Issuer)
+        return nil, errors.New("invalid issuer")
+    }
+
+    log.Println("\n=== Token Valid ===")
+    log.Printf("Valid claims: %+v", claims)
+    return claims, nil
 }
 
 // Helper for JSON responses

@@ -14,21 +14,21 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/ulule/limiter/v3"
+	ululeLimiter "github.com/ulule/limiter/v3"
 	"github.com/ulule/limiter/v3/drivers/store/memory"
 )
 
 var (
-	limiter *limiter.Limiter
+	appLimiter *ululeLimiter.Limiter
 )
 
 func initRateLimiter() {
-	rate := limiter.Rate{
+	rate := ululeLimiter.Rate{
 		Period: 1 * time.Hour,
 		Limit:  1000,
 	}
 	store := memory.NewStore()
-	limiter = limiter.New(store, rate)
+	appLimiter = ululeLimiter.New(store, rate)
 }
 
 func main() {
