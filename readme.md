@@ -167,6 +167,8 @@ docker tag ride-sharing-backend hellomukama/ride-sharing-backend:latest
 docker push hellomukama/ride-sharing-backend:latest
 ```
 
+> **Note:** Replace 'hellomukama' above with your Docker Hub username.
+
 ### Optimized Ride-Matching with Redis Geo
 
 To leverage Redis Geo for ride-matching, run the following command:
