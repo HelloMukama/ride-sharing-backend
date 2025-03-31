@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 	"strings"
-	
 )
 
 func TestLoginHandler(t *testing.T) {

@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 	"github.com/redis/go-redis/v9"
-
-	"ride-sharing-backend/src"
 )
 
 var redisClient *redis.Client

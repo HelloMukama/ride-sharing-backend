@@ -139,9 +139,15 @@ If `driver2` is in the area, they will receive a ride notification.
 ### Docker Deployment
 
 ```bash
+# Build the Docker image
 docker build -t ride-sharing-backend .
-docker tag ride-sharing-backend your-container-registry/ride-sharing
-docker push your-container-registry/ride-sharing
+
+# Tag it for Docker Hub
+docker tag ride-sharing-backend hellomukama/ride-sharing-backend:latest
+
+# Push it to Docker Hub
+docker push hellomukama/ride-sharing-backend:latest
+
 ```
 
 ## Testing

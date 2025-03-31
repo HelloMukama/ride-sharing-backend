@@ -4,8 +4,6 @@ import (
     "net/http"
     "testing"
     "time"
-
-    "ride-sharing-backend/src"
 )
 
 func BenchmarkRequestRide(b *testing.B) {

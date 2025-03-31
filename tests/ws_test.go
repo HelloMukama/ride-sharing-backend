@@ -5,8 +5,6 @@ import (
 	"testing"
 	"golang.org/x/net/websocket"
 	"strings"
-
-	"ride-sharing-backend/src"
 )
 
 func TestWebSocket(t *testing.T) {

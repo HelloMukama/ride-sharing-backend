@@ -5,8 +5,6 @@ import (
 	"net/http/httptest"
 	"testing"
 	"strings"
-
-	"ride-sharing-backend/src"
 )
 
 func TestListDrivers(t *testing.T) {
