@@ -22,19 +22,37 @@ This project of a backend Go implementation for ride-sharing is designed for sca
 ## Project Structure
 
 ```
-ride-sharing-backend/
-├── src/
-│   ├── main.go         # API entry point
-│   ├── matching.go     # Optimized ride-matching algorithm
-│   ├── api.go          # External API integration
-│   ├── auth.go         # JWT authentication & security
-│   ├── caching.go      # Redis caching strategy
-│   └── config.env      # Environment variables
-├── tests/              # Unit, integration, and load tests
-├── Dockerfile          # Containerization setup
-├── docker-compose.yml  # Local development setup
-├── .github/workflows/ci-cd.yml # CI/CD automation
-└── README.md           # Documentation
+├── docker-compose.yml
+├── Dockerfile
+├── go.mod
+├── go.sum
+├── LICENSE
+├── monitoring
+│   ├── grafana-dashboard.json
+│   └── prometheus.yml
+├── readme.md
+├── src
+│   ├── api.go
+│   ├── auth.go
+│   ├── caching.go
+│   ├── client
+│   │   └── ws_test_client.go
+│   ├── config.env
+│   ├── database.go
+│   ├── init.go
+│   ├── main.go
+│   ├── matching.go
+│   ├── migrations
+│   │   └── 001_init_schema.up.sql
+│   ├── notifications.go
+│   ├── payments.go
+│   └── testutils.go
+├── tests
+│   ├── auth_test.go
+│   ├── drivers_test.go
+│   ├── load_test.go
+│   ├── ride_test.go
+│   └── ws_test.go
 ```
 
 ## Installation & Setup
@@ -147,85 +165,37 @@ docker tag ride-sharing-backend hellomukama/ride-sharing-backend:latest
 
 # Push it to Docker Hub
 docker push hellomukama/ride-sharing-backend:latest
-
 ```
 
-## Testing
+### Optimized Ride-Matching with Redis Geo
 
-### Running Unit Tests
+To leverage Redis Geo for ride-matching, run the following command:
 
 ```bash
-go test ./tests/...
+docker-compose exec redis redis-cli
 ```
 
-### Load Testing Example
+Example usage:
 
 ```bash
-wrk -t4 -c100 -d60s http://localhost:8080/drivers -H "Authorization: Bearer $TOKEN"
+127.0.0.1:6379> GEOADD drivers 32.5811 0.3135 "driver1"
+(integer) 1
+127.0.0.1:6379> GEORADIUS drivers 32.5811 0.3135 5 km
+1) "driver1"
+127.0.0.1:6379> GEOADD drivers 32.5811 0.3135 "driver3"
+(integer) 1
+127.0.0.1:6379> GEORADIUS drivers 32.5811 0.3135 5 km
+1) "driver1"
+2) "driver3"
 ```
 
-## Monitoring
-
-### Access Metrics
-
-1. Prometheus: http://localhost:9090
-2. Grafana: http://localhost:3000 (default credentials: admin/admin)
-
-### Sample Metrics Collected
-
-- ride_requests_total
-- ride_matching_duration_seconds
-- active_drivers
-- api_response_time_seconds
-
-## Troubleshooting
-
-### Common Issues
-
-#### Redis Connection Problems:
+You can specify the distance in kilometers to see nearby drivers:
 
 ```bash
-docker-compose logs redis
+127.0.0.1:6379> GEORADIUS drivers 32.5811 0.3135 78 km
+1) "driver1"
+2) "driver3"
 ```
-
-#### Database Migration Issues:
-
-```bash
-docker-compose exec db psql -U rideuser rides -c "SELECT * FROM pg_migrations"
-```
-
-#### Authentication Errors:
-
-```bash
-curl -v POST "http://localhost:8080/auth/login" -d '{"username":"testuser"}'
-```
-
-### Checking Service Health
-
-```bash
-curl http://localhost:8080/health
-```
-
-### Docker Issues
-
-If you encounter issues running the service with Docker, try the following:
-
-```bash
-docker-compose down
-
-docker volume prune -f
-
-docker-compose build --no-cache
-
-docker-compose up
-```
-
-### Explanation of Steps:
-
-1. **docker-compose down** - Stops and removes containers.
-2. **docker volume prune -f** - Cleans up unused volumes.
-3. **docker-compose build --no-cache** - Rebuilds containers from scratch.
-4. **docker-compose up** - Starts the services fresh.
 
 ## Future Improvements
 
@@ -234,4 +204,3 @@ docker-compose up
 3. Implement dynamic pricing based on demand.
 4. Add a driver rating system.
 5. Enhance geospatial queries with additional filters.
-
