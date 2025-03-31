@@ -2,24 +2,24 @@
 
 ## Overview
 
-This project is a high-performance ride-sharing backend designed for scalability and reliability, demonstrating:
+This project of a backend go implementation for ride-sharing designed for scalability and reliability, demonstrating:
 
-- Advanced Algorithm Design: Efficiently assigning drivers to riders using optimized geospatial queries
-- API Integrations: Fetching real-time driver locations from geolocation APIs with caching strategies
-- Deployment: Docker deployment with auto-scaling and CI/CD automation
-- Security & Performance Best Practices: JWT authentication, rate-limiting, and observability
+- **Advanced Algorithm Design**: Efficiently assigns drivers to riders using optimized geospatial queries.
+- **API Integrations**: Fetches real-time driver locations from geolocation APIs with caching strategies.
+- **Deployment**: Docker deployment with auto-scaling and CI/CD automation.
+- **Security & Performance Best Practices**: Implements JWT authentication, rate-limiting, and observability.
 
 ## Features
 
-- Optimized Ride-Matching Algorithm: Uses geospatial indexing using Redis Geo for efficient distance calculations
-- Real-Time Geolocation Fetching: Integrates with OpenStreetMap with rate-limited caching
-- Deployment: Containerized with Docker, scalable microservices, and automated CI/CD pipeline
-- Secure & Performant: Implements JWT authentication, rate-limiting, and monitoring (Prometheus, Grafana)
-- Additional Features: Redis caching, WebSockets for real-time updates, and payment processing
+- **Optimized Ride-Matching Algorithm**: Uses geospatial indexing with Redis Geo for efficient distance calculations.
+- **Real-Time Geolocation Fetching**: Integrates with OpenStreetMap with rate-limited caching.
+- **Deployment**: Containerized with Docker, scalable microservices, and automated CI/CD pipeline.
+- **Security & Performance**: Implements JWT authentication, rate-limiting, and monitoring with Prometheus and Grafana.
+- **Additional Features**: Redis caching, WebSockets for real-time updates, and payment processing.
 
 ## Project Structure
 
-
+```
 ride-sharing-backend/
 ├── src/
 │   ├── main.go         # API entry point
@@ -33,8 +33,7 @@ ride-sharing-backend/
 ├── docker-compose.yml  # Local development setup
 ├── .github/workflows/ci-cd.yml # CI/CD automation
 └── README.md           # Documentation
-
-
+```
 
 ## Installation & Setup
 
@@ -43,18 +42,14 @@ ride-sharing-backend/
 ```bash
 git clone https://github.com/yourusername/ride-sharing-backend.git
 cd ride-sharing-backend
-
+```
 
 ### 2. Set Up Environment Variables
 
-Create a .env file and add API keys & configs:
+Copy the contents of `.env.example` into a new `.env` file and update values where necessary:
 
 ```bash
-PORT=8080
-API_KEY=your_api_key_here
-REDIS_URL=redis:6379
-JWT_SECRET=your_jwt_secret
-DATABASE_URL=postgres://rideuser:ride123@db:5432/rides
+cp .env.example .env
 ```
 
 ### 3. Run with Docker
@@ -75,101 +70,80 @@ go run src/main.go
 
 #### Login (POST /auth/login)
 
-Request:
 ```bash
-curl -X POST "http://localhost:8080/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"testdriver","user_id":123,"role":"driver"}'
+curl -s -X POST http://localhost:8080/auth/login -H "Content-Type: application/json" -d '{"username":"testuser","user_id":123,"role":"rider"}' | jq
 ```
 
-Response:
-```json
-{
-  "token": "eyJhbGciOi...",
-  "expires_in": "12h"
-}
+Once you get the token, store it in your `.env` file as follows:
+
+```bash
+echo "TOKEN=your_token_here" >> .env
+source .env
 ```
+
+Verify that the token is stored:
+
+```bash
+echo $TOKEN
+```
+
+> **Note:** The token received upon login becomes invalid upon logout.
 
 ### Ride Management
 
-#### Request Ride (POST /request-ride)
-
-Request:
-```bash
-curl -X POST "http://localhost:8080/request-ride" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{"lat":0.3135,"lng":32.5811}'
-```
-
-Response:
-```json
-{
-  "success": true,
-  "data": {
-    "ride_id": "a1b2c3d4",
-    "driver_id": "driver1",
-    "eta": 8,
-    "price": 12.50
-  }
-}
-```
-
 #### List Available Drivers (GET /drivers)
 
-Request:
 ```bash
-curl "http://localhost:8080/drivers?lat=0.3135&lng=32.5811&radius=5" \
-  -H "Authorization: Bearer YOUR_TOKEN"
+curl -X GET http://localhost:8080/drivers -H "Authorization: Bearer $TOKEN" | jq
 ```
 
-Response:
-```json
-{
-  "drivers": [
-    {
-      "id": "driver1",
-      "lat": 0.3135,
-      "lng": 32.5810,
-      "distance": 0.12,
-      "vehicle": "sedan"
-    }
-  ]
-}
+#### Request Ride (POST /request-ride)
+
+```bash
+curl -X POST http://localhost:8080/request-ride -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d '{"lat":0.3135,"lng":32.5805}' | jq
 ```
+
+This response contains a `ride_id`. Use it in the next step.
 
 #### Check Ride Status (GET /ride-status/:id)
 
-Request:
 ```bash
-curl "http://localhost:8080/ride-status/a1b2c3d4" \
-  -H "Authorization: Bearer YOUR_TOKEN"
+ride_id="your_ride_id_here"
+curl -X GET "http://localhost:8080/ride-status/$ride_id" -H "Authorization: Bearer $TOKEN" | jq
 ```
 
-Response:
-```json
-{
-  "ride_id": "a1b2c3d4",
-  "status": "in_progress",
-  "driver_location": {
-    "lat": 0.3135,
-    "lng": 32.5810
-  },
-  "eta": 5
-}
+### Logout (POST /auth/logout)
+
+```bash
+curl -X POST http://localhost:8080/auth/logout -H "Authorization: Bearer $TOKEN"
 ```
+
+## WebSocket Testing
+
+Open another terminal. WebSocket notifications will be triggered for drivers available in the system.
+
+1. Request a ride:
+
+```bash
+curl -X POST http://localhost:8080/request-ride -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d '{"lat":0.3135,"lng":32.5805}' | jq
+```
+
+2. In another terminal, test WebSocket notifications:
+
+```bash
+docker-compose exec app /ws_test_client driver2
+```
+
+If `driver2` is in the area, they will receive a ride notification.
+
+> **Note:** If a ride is requested for a driver and they connect later, they will see all pending ride requests.
 
 ## Deployment
 
 ### Docker Deployment
 
-1. Build the container:
 ```bash
 docker build -t ride-sharing-backend .
-```
-
-2. Tag and push to container registry:
-```bash
 docker tag ride-sharing-backend your-container-registry/ride-sharing
 docker push your-container-registry/ride-sharing
 ```
@@ -185,7 +159,7 @@ go test ./tests/...
 ### Load Testing Example
 
 ```bash
-wrk -t4 -c100 -d60s http://localhost:8080/drivers -H "Authorization: Bearer YOUR_TOKEN"
+wrk -t4 -c100 -d60s http://localhost:8080/drivers -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Monitoring
@@ -202,29 +176,24 @@ wrk -t4 -c100 -d60s http://localhost:8080/drivers -H "Authorization: Bearer YOUR
 - active_drivers
 - api_response_time_seconds
 
-## Future Improvements
-
-1. Implement real-time ride tracking using WebSockets
-2. Add multi-region failover for high availability
-3. Implement dynamic pricing based on demand
-4. Add driver rating system
-5. Enhance geospatial queries with additional filters
-
 ## Troubleshooting
 
 ### Common Issues
 
-1. Redis Connection Problems:
+#### Redis Connection Problems:
+
 ```bash
 docker-compose logs redis
 ```
 
-2. Database Migration Issues:
+#### Database Migration Issues:
+
 ```bash
 docker-compose exec db psql -U rideuser rides -c "SELECT * FROM pg_migrations"
 ```
 
-3. Authentication Errors:
+#### Authentication Errors:
+
 ```bash
 curl -v POST "http://localhost:8080/auth/login" -d '{"username":"testuser"}'
 ```
@@ -234,3 +203,32 @@ curl -v POST "http://localhost:8080/auth/login" -d '{"username":"testuser"}'
 ```bash
 curl http://localhost:8080/health
 ```
+
+### Docker Issues
+
+If you encounter issues running the service with Docker, try the following:
+
+```bash
+docker-compose down
+
+docker volume prune -f
+
+docker-compose build --no-cache
+
+docker-compose up
+```
+
+### Explanation of Steps:
+
+1. **docker-compose down** - Stops and removes containers.
+2. **docker volume prune -f** - Cleans up unused volumes.
+3. **docker-compose build --no-cache** - Rebuilds containers from scratch.
+4. **docker-compose up** - Starts the services fresh.
+
+## Future Improvements
+
+1. Implement real-time ride tracking using WebSockets.
+2. Add multi-region failover for high availability.
+3. Implement dynamic pricing based on demand.
+4. Add a driver rating system.
+5. Enhance geospatial queries with additional filters.
