@@ -119,6 +119,12 @@ docker-compose up --build
 curl -s -X POST http://localhost:8080/auth/login -H "Content-Type: application/json" -d '{"username":"testuser","user_id":123,"role":"rider"}' | jq
 ```
 
+#### Logout (POST /auth/logout)
+```bash
+curl -s -X POST http://localhost:8080/auth/logout -H "Authorization: Bearer $TOKEN"
+```
+> **Note:** Logging out invalidates the token, making it unusable.
+
 ### Ride Management
 
 #### List Available Drivers (GET /drivers)
@@ -169,18 +175,12 @@ docker tag ride-sharing-backend hellomukama/ride-sharing-backend:latest
 docker push hellomukama/ride-sharing-backend:latest
 ```
 > **Note:** Replace 'hellomukama' above with your Docker Hub username.
-
-## Testing
-
-### Running Unit Tests
+> If you encounter permission errors, try:
 ```bash
-go test ./tests/...
+docker logout
+docker login -u hellomukama
 ```
-
-### Load Testing Example
-```bash
-wrk -t4 -c100 -d60s http://localhost:8080/drivers -H "Authorization: Bearer $TOKEN"
-```
+(replacing 'hellomukama' with your own username).
 
 ## Troubleshooting
 
