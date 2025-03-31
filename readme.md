@@ -40,7 +40,7 @@ ride-sharing-backend/
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/ride-sharing-backend.git
+git clone https://github.com/hellomukama/ride-sharing-backend.git
 cd ride-sharing-backend
 ```
 
