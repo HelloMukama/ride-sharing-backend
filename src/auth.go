@@ -19,11 +19,12 @@ import (
 
 // Custom claims with user ID, role and version
 type Claims struct {
-	UserID   int    `json:"user_id"`
-	Username string `json:"username"`
-	Role     string `json:"role"`
-	Version  int    `json:"version"`
-	jwt.RegisteredClaims
+    UserID   int    `json:"user_id"`
+    Username string `json:"username"`
+    Email    string `json:"email"`
+    Role     string `json:"role"`
+    Version  int    `json:"version"`
+    jwt.RegisteredClaims
 }
 
 const (
@@ -31,13 +32,11 @@ const (
 	defaultJWTExpiry   = 12 * time.Hour
 )
 
-// Replace the existing var block with this:
 var (
     jwtSecret     []byte
     jwtExpiration time.Duration
 )
 
-// Update initAuth() to:
 func initAuth() error {
     // Load JWT secret
     secret := os.Getenv("JWT_SECRET")
@@ -57,6 +56,19 @@ func initAuth() error {
             return errors.New("invalid JWT_EXPIRE format. Examples: 24h, 1h30m")
         }
     }
+
+    // Verify Redis connection if needed
+    if redisClient == nil {
+        return errors.New("Redis client not initialized - token revocation will not work")
+    } else {
+        // Test Redis connection
+        ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+        defer cancel()
+        if _, err := redisClient.Ping(ctx).Result(); err != nil {
+            return fmt.Errorf("Redis connection test failed: %w", err)
+        }
+        log.Println("Redis connection verified for auth system")
+    }
     
     log.Printf("JWT initialized (secret length: %d, expiration: %v)", len(jwtSecret), jwtExpiration)
     return nil
@@ -75,6 +87,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		UserID   int    `json:"user_id"`
 		Role     string `json:"role"`
+        Email    string `json:"email"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
@@ -124,32 +137,40 @@ func generateJWT(username string, userID int, role string) (string, error) {
 }
 
 func validateToken(tokenString string) (*Claims, error) {
-	if len(jwtSecret) == 0 {
-		return nil, errors.New("JWT secret not initialized")
-	}
+    if len(jwtSecret) == 0 {
+        return nil, errors.New("JWT secret not initialized")
+    }
 
-	claims := &Claims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return jwtSecret, nil
-	})
+    claims := &Claims{}
+    token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+        if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+            return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+        }
+        return jwtSecret, nil
+    })
 
-	if err != nil || !token.Valid {
-		return nil, errors.New("invalid token")
-	}
+    if err != nil || !token.Valid {
+        return nil, errors.New("invalid token")
+    }
 
-	// Version checking only if Redis is available
-	if redisClient != nil {
-		if currentVer, err := getTokenVersion(claims.UserID); err == nil {
-			if claims.Version < currentVer {
-				return nil, errors.New("token revoked")
-			}
-		}
-	}
+    // Debug: Log Redis status during validation
+    log.Printf("Validating token for user %d (version %d)", claims.UserID, claims.Version)
 
-	return claims, nil
+    currentVer, err := getTokenVersion(claims.UserID)
+    if err != nil {
+        log.Printf("Token version check failed: %v", err)
+        // If Redis is down, we should fail closed (reject tokens)
+        return nil, fmt.Errorf("token verification unavailable")
+    }
+
+    log.Printf("Current token version for user %d: %d (token version: %d)", 
+        claims.UserID, currentVer, claims.Version)
+
+    if claims.Version < currentVer {
+        return nil, errors.New("token revoked - please login again")
+    }
+
+    return claims, nil
 }
 
 func validateTokenHandler(w http.ResponseWriter, r *http.Request) {
@@ -187,33 +208,75 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    _, err := incrementTokenVersion(claims.UserID)
+    // Debug: Log current Redis status
+    log.Printf("Redis client status: %v", redisClient != nil)
+
+    // Get current version first
+    currentVer, err := getTokenVersion(claims.UserID)
     if err != nil {
-        respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Logout failed"})
+        log.Printf("Failed to get current token version: %v", err)
+        respondJSON(w, http.StatusInternalServerError, map[string]string{
+            "error": "Failed to get current token version",
+            "details": err.Error(),
+        })
         return
     }
 
-    respondJSON(w, http.StatusOK, map[string]string{"status": "logged out"})
+    // Increment version
+    newVer, err := incrementTokenVersion(claims.UserID)
+    if err != nil {
+        log.Printf("Failed to increment token version: %v", err)
+        respondJSON(w, http.StatusInternalServerError, map[string]string{
+            "error": "Logout failed - could not revoke token",
+            "details": err.Error(),
+        })
+        return
+    }
+
+    log.Printf("User %d logged out (token version %d -> %d)", claims.UserID, currentVer, newVer)
+    respondJSON(w, http.StatusOK, map[string]string{
+        "status": "logged out",
+        "version": strconv.Itoa(newVer),
+        "message": fmt.Sprintf("Token version incremented from %d to %d", currentVer, newVer),
+    })
+}
+
+func getTokenVersion(userID int) (int, error) {
+    if redisClient == nil {
+        return 0, errors.New("redis client not available")
+    }
+
+    ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+    defer cancel()
+
+    ver, err := redisClient.Get(ctx, tokenVersionPrefix+strconv.Itoa(userID)).Int()
+    if err == redis.Nil {
+        // If no version exists, return 1 (first valid version)
+        return 1, nil
+    }
+    return ver, err
 }
 
 func incrementTokenVersion(userID int) (int, error) {
-    ctx := context.Background()
+    if redisClient == nil {
+        return 0, errors.New("redis client not available")
+    }
+
+    ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+    defer cancel()
+
     key := tokenVersionPrefix + strconv.Itoa(userID)
     newVer, err := redisClient.Incr(ctx, key).Result()
     if err != nil {
         return 0, err
     }
-    redisClient.Expire(ctx, key, 30*24*time.Hour)
-    return int(newVer), nil
-}
-
-func getTokenVersion(userID int) (int, error) {
-    ctx := context.Background()
-    ver, err := redisClient.Get(ctx, tokenVersionPrefix+strconv.Itoa(userID)).Int()
-    if err == redis.Nil {
-        return 1, nil
+    
+    // Set expiration (30 days)
+    if err := redisClient.Expire(ctx, key, 30*24*time.Hour).Err(); err != nil {
+        return int(newVer), fmt.Errorf("failed to set expiration: %w", err)
     }
-    return ver, err
+    
+    return int(newVer), nil
 }
 
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {

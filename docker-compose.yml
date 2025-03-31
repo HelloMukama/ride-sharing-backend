@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   app:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     environment:
@@ -11,6 +13,8 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - PORT=8080
       - ENV_FILE=/app/.env
+      - FLUTTERWAVE_SECRET_KEY=${FLUTTERWAVE_SECRET_KEY}
+      - FLUTTERWAVE_PUBLIC_KEY=${FLUTTERWAVE_PUBLIC_KEY}
     depends_on:
       redis:
         condition: service_healthy
@@ -25,7 +29,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 60s  # Increased to allow for slower startups
+    restart: unless-stopped
+    networks:
+      - backend
 
   db:
     image: postgis/postgis:15-3.3
@@ -42,8 +49,11 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rideuser -d rides"]
       interval: 5s
-      timeout: 5s
-      retries: 10
+      timeout: 10s  # Increased timeout
+      retries: 15   # Increased retries
+      start_period: 30s
+    networks:
+      - backend
 
   redis:
     image: redis:7
@@ -54,8 +64,11 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
-      timeout: 5s
-      retries: 5
+      timeout: 10s  # Increased timeout
+      retries: 15   # Increased retries
+      start_period: 30s
+    networks:
+      - backend
 
   prometheus:
     image: prom/prometheus
@@ -66,7 +79,7 @@ services:
     depends_on:
       - app
     networks:
-      - default
+      - backend
 
   grafana:
     image: grafana/grafana
@@ -76,9 +89,15 @@ services:
       - prometheus
     volumes:
       - grafana_data:/var/lib/grafana
+    networks:
+      - backend
 
 volumes:
   redis_data:
   postgres_data:
   grafana_data:
+
+networks:
+  backend:
+    driver: bridge
     

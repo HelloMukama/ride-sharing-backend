@@ -53,50 +53,62 @@ func main() {
     // Initialize colored output
     success := color.New(color.FgGreen).SprintFunc()
     highlight := color.New(color.FgCyan).SprintFunc()
+    warning := color.New(color.FgYellow).SprintFunc()
 
     // Clear terminal screen
     clearScreen()
+
+    log.Println(warning("Starting initialization sequence..."))
 
     // 1. Load environment variables FIRST
     if err := loadEnvFiles(); err != nil {
         log.Fatal(color.RedString("Error loading environment: %v", err))
     }
+    log.Println(success("Environment variables loaded"))
 
-    // 2. Initialize auth system IMMEDIATELY with forced validation
-    if len(os.Getenv("JWT_SECRET")) < 32 {
-        log.Fatal("JWT_SECRET must be at least 32 characters")
-    }
-    if err := initAuth(); err != nil {
-        log.Fatal(color.RedString("Auth initialization failed: %v", err))
-    }
-
-    // 3. Initialize Redis
+    // 2. Initialize Redis with retries
+    log.Println("Initializing Redis connection...")
     if err := InitRedis(); err != nil {
         log.Fatal(color.RedString("Redis initialization failed: %v", err))
     }
+    log.Println(success("Redis connection established and verified"))
 
-    // 4. Initialize database
+    // 3. Initialize database with retries
+    log.Println("Initializing database connection...")
     if err := InitDB(); err != nil {
         log.Fatal(color.RedString("Database initialization failed: %v", err))
     }
+    log.Println(success("Database connection and migrations verified"))
+
+    // 4. Initialize auth system (requires Redis)
+    log.Println("Initializing authentication system...")
+    if err := initAuth(); err != nil {
+        log.Fatal(color.RedString("Auth initialization failed: %v", err))
+    }
+    log.Println(success("Authentication system ready"))
 
     // 5. Initialize rate limiter
     initRateLimiter()
+    log.Println(success("Rate limiter initialized"))
 
     // 6. Create and configure router
     r := configureRouter()
+    log.Println(success("Router configured"))
 
     // 7. Start server
     port := getPort()
     server := &http.Server{
         Addr:         ":" + port,
         Handler:      r,
-        ReadTimeout:  10 * time.Second,
+        ReadTimeout:  15 * time.Second,
         WriteTimeout: 30 * time.Second,
+        IdleTimeout:  60 * time.Second,
     }
 
-    log.Printf(success("Server starting on port %s..."), highlight(port))
-    log.Fatal(server.ListenAndServe())
+    log.Printf(success("\nServer starting on port %s...\n"), highlight(port))
+    if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+        log.Fatal(color.RedString("Server failed: %v", err))
+    }
 }
 
 func clearScreen() {
@@ -132,51 +144,51 @@ func loadEnvFiles() error {
 }
 
 func configureRouter() *mux.Router {
-	r := mux.NewRouter()
-	SetupAuthRoutes(r)
+    r := mux.NewRouter()
+    
+    // Public routes
+    r.HandleFunc("/auth/login", loginHandler).Methods("POST")
+    r.HandleFunc("/auth/validate", validateTokenHandler).Methods("GET")
+    r.Handle("/metrics", promhttp.Handler())
+    r.HandleFunc("/ws", WSHandler)
+    r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("OK"))
+    })
 
-	// Metrics endpoint
-	r.Handle("/metrics", promhttp.Handler())
+    // Protected routes
+    api := r.PathPrefix("/").Subrouter()
+    api.Use(AuthMiddleware)
+    api.Use(metricsMiddleware)
+    {
+        api.HandleFunc("/request-ride", requestRideHandler).Methods("POST")
+        api.HandleFunc("/drivers", listDriversHandler).Methods("GET")
+        api.HandleFunc("/ride-status/{id}", rideStatusHandler).Methods("GET")
 
-	// WebSocket endpoint
-	r.HandleFunc("/ws", WSHandler)
+        r.HandleFunc("/payment/initiate", initiatePaymentHandler).Methods("POST")
+		r.HandleFunc("/payment/verify", verifyPaymentHandler).Methods("POST")
 
-	// Health check endpoint
-	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	})
+        api.HandleFunc("/auth/logout", logoutHandler).Methods("POST")
+    }
 
-	// API Documentation Route
-	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"service": "Ride Sharing Backend",
-			"endpoints": map[string]string{
-				"auth_login":    "POST /auth/login",
-				"request_ride":  "POST /request-ride (requires auth)",
-				"list_drivers":  "GET /drivers",
-				"ride_status":   "GET /ride-status/:id",
-				"metrics":       "GET /metrics",
-				"websocket":     "GET /ws?driver_id=DRIVER_ID",
-			},
-		})
-	})
+    // API Documentation Route
+    r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "service": "Ride Sharing Backend",
+            "endpoints": map[string]string{
+                "auth_login":    "POST /auth/login",
+                "auth_validate": "GET /auth/validate",
+                "auth_logout":   "POST /auth/logout (protected)",
+                "request_ride":  "POST /request-ride (protected)",
+                "list_drivers":  "GET /drivers (protected)",
+                "ride_status":   "GET /ride-status/:id (protected)",
+                "metrics":       "GET /metrics",
+                "websocket":     "GET /ws?driver_id=DRIVER_ID",
+            },
+        })
+    })
 
-	// Authentication Routes
-	r.HandleFunc("/auth/login", loginHandler).Methods("POST")
-
-	// Ride Management Routes (protected)
-	api := r.PathPrefix("/").Subrouter()
-	api.Use(AuthMiddleware)
-	api.Use(metricsMiddleware)
-	{
-		api.HandleFunc("/request-ride", requestRideHandler).Methods("POST")
-		api.HandleFunc("/drivers", listDriversHandler).Methods("GET")
-		api.HandleFunc("/ride-status/{id}", rideStatusHandler).Methods("GET")
-	}
-
-	return r
+    return r
 }
 
 // metricsMiddleware tracks request metrics
@@ -215,4 +227,51 @@ func getPort() string {
 		return port
 	}
 	return "8080"
+}
+
+func initiatePaymentHandler(w http.ResponseWriter, r *http.Request) {
+	claims, err := validateRequest(r)
+	if err != nil {
+		respondJSON(w, http.StatusUnauthorized, errorResponse(err.Error()))
+		return
+	}
+
+	var req struct {
+		RideID string  `json:"ride_id"`
+		Amount float64 `json:"amount"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondJSON(w, http.StatusBadRequest, errorResponse("Invalid request"))
+		return
+	}
+
+	paymentLink, err := ProcessPayment(req.RideID, req.Amount, claims.Email)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, errorResponse(err.Error()))
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"payment_link": paymentLink,
+	})
+}
+
+func verifyPaymentHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		TxRef string `json:"tx_ref"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondJSON(w, http.StatusBadRequest, errorResponse("Invalid request"))
+		return
+	}
+
+	verified, err := VerifyPayment(req.TxRef)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, errorResponse(err.Error()))
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"verified": verified,
+	})
 }

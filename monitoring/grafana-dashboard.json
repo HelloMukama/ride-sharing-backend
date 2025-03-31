@@ -1,0 +1,27 @@
+{
+  "title": "Ride Sharing Metrics",
+  "panels": [
+    {
+      "title": "Ride Requests",
+      "type": "graph",
+      "targets": [{
+        "expr": "sum(rate(rides_requested_total[5m])) by (status)",
+        "legendFormat": "{{status}}"
+      }]
+    },
+    {
+      "title": "Matching Performance",
+      "type": "heatmap",
+      "targets": [{
+        "expr": "rate(ride_matching_seconds_bucket[5m])"
+      }]
+    },
+    {
+      "title": "Driver Availability",
+      "type": "stat",
+      "targets": [{
+        "expr": "drivers_available"
+      }]
+    }
+  ]
+}

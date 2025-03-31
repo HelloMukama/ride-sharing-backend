@@ -94,3 +94,11 @@ CREATE TABLE driver_notifications (
 );
 
 CREATE INDEX idx_notifications_driver ON driver_notifications(driver_id, status);
+
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS name VARCHAR(100);
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS rating FLOAT DEFAULT 5.0;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS vehicle_model VARCHAR(50);
+
+ALTER TABLE rides ADD COLUMN IF NOT EXISTS estimated_eta INTEGER;
+ALTER TABLE rides ADD COLUMN IF NOT EXISTS price_estimate NUMERIC(10,2);
+ALTER TABLE rides ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP;

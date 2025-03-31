@@ -82,17 +82,19 @@ func runMigrations(ctx context.Context) error {
 
 	// Create rides table
 	if _, err := tx.Exec(ctx, `
-		CREATE TABLE rides (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			driver_id VARCHAR(255) NOT NULL,
-			rider_id INTEGER NOT NULL,
-			status VARCHAR(50) NOT NULL CHECK (status IN ('requested', 'accepted', 'in_progress', 'completed', 'cancelled')),
-			start_location GEOGRAPHY(POINT) NOT NULL,
-			end_location GEOGRAPHY(POINT),
-			created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-			updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-		)`); err != nil {
-		return fmt.Errorf("failed to create rides table: %w", err)
+	    CREATE TABLE rides (
+	        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	        driver_id VARCHAR(255) NOT NULL,
+	        rider_id INTEGER NOT NULL,
+	        status VARCHAR(50) NOT NULL CHECK (status IN ('requested', 'accepted', 'in_progress', 'completed', 'cancelled')),
+	        start_location GEOGRAPHY(POINT) NOT NULL,
+	        end_location GEOGRAPHY(POINT),
+	        estimated_eta INTEGER,
+	        price_estimate NUMERIC(10,2),
+	        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+	        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+	    )`); err != nil {
+	    return fmt.Errorf("failed to create rides table: %w", err)
 	}
 
 	// Create indexes
@@ -116,10 +118,12 @@ func runMigrations(ctx context.Context) error {
 }
 
 type RideStatus struct {
-	ID         string    `json:"ride_id"`
-	DriverID   string    `json:"driver_id"`
-	RiderID    int       `json:"rider_id"`
-	Status     string    `json:"status"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+    ID         string    `json:"ride_id"`
+    DriverID   string    `json:"driver_id"`
+    RiderID    int       `json:"rider_id"`
+    Status     string    `json:"status"`
+    Price      float64   `json:"price,omitempty"`
+    ETA        int       `json:"eta,omitempty"`
+    CreatedAt  time.Time `json:"created_at"`
+    UpdatedAt  time.Time `json:"updated_at"`
 }
