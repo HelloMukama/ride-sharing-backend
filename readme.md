@@ -168,6 +168,7 @@ docker tag ride-sharing-backend hellomukama/ride-sharing-backend:latest
 # Push it to Docker Hub
 docker push hellomukama/ride-sharing-backend:latest
 ```
+> **Note:** Replace 'hellomukama' above with your Docker Hub username.
 
 ## Testing
 
