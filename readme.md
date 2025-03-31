@@ -1,8 +1,10 @@
 # Ride-Sharing Service Backend
 
+**NB: This project has been tested on Ubuntu 20.04 LTS**
+
 ## Overview
 
-This project of a backend go implementation for ride-sharing designed for scalability and reliability, demonstrating:
+This project of a backend Go implementation for ride-sharing is designed for scalability and reliability, demonstrating:
 
 - **Advanced Algorithm Design**: Efficiently assigns drivers to riders using optimized geospatial queries.
 - **API Integrations**: Fetches real-time driver locations from geolocation APIs with caching strategies.
@@ -56,12 +58,6 @@ cp .env.example .env
 
 ```bash
 docker-compose up --build
-```
-
-### 4. Run Locally (Alternative)
-
-```bash
-go run src/main.go
 ```
 
 ## API Endpoints
@@ -232,3 +228,4 @@ docker-compose up
 3. Implement dynamic pricing based on demand.
 4. Add a driver rating system.
 5. Enhance geospatial queries with additional filters.
+
