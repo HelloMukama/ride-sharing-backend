@@ -1,4 +1,3 @@
-```markdown
 # Ride-Sharing Service Backend
 
 ## Overview
@@ -20,7 +19,7 @@ This project is a high-performance ride-sharing backend designed for scalability
 
 ## Project Structure
 
-```
+
 ride-sharing-backend/
 ├── src/
 │   ├── main.go         # API entry point
@@ -34,7 +33,8 @@ ride-sharing-backend/
 ├── docker-compose.yml  # Local development setup
 ├── .github/workflows/ci-cd.yml # CI/CD automation
 └── README.md           # Documentation
-```
+
+
 
 ## Installation & Setup
 
@@ -43,7 +43,7 @@ ride-sharing-backend/
 ```bash
 git clone https://github.com/yourusername/ride-sharing-backend.git
 cd ride-sharing-backend
-```
+
 
 ### 2. Set Up Environment Variables
 
@@ -174,27 +174,6 @@ docker tag ride-sharing-backend your-container-registry/ride-sharing
 docker push your-container-registry/ride-sharing
 ```
 
-### Kubernetes Deployment (Example)
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ride-backend
-spec:
-  replicas: 3
-  template:
-    spec:
-      containers:
-      - name: app
-        image: your-container-registry/ride-sharing
-        ports:
-        - containerPort: 8080
-        envFrom:
-        - configMapRef:
-            name: ride-config
-```
-
 ## Testing
 
 ### Running Unit Tests
@@ -255,16 +234,3 @@ curl -v POST "http://localhost:8080/auth/login" -d '{"username":"testuser"}'
 ```bash
 curl http://localhost:8080/health
 ```
-
-## License
-
-MIT License
-```
-
-This README provides:
-1. Clear setup instructions without emojis
-2. Detailed API examples with exact curl commands
-3. Proper formatting for code blocks and JSON
-4. Deployment instructions for both Docker and Kubernetes
-5. Testing and monitoring details
-6. Organized according to the test requirements
