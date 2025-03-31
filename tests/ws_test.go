@@ -4,9 +4,17 @@ import (
 	"net/http/httptest"
 	"testing"
 	"golang.org/x/net/websocket"
+	"strings"
+
+	"ride-sharing-backend/src"
 )
 
 func TestWebSocket(t *testing.T) {
+
+    InitRedis()
+    InitDB()
+    initAuth()
+    
 	server := httptest.NewServer(http.HandlerFunc(WSHandler))
 	defer server.Close()
 

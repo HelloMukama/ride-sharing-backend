@@ -5,9 +5,19 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"github.com/redis/go-redis/v9"
+
+	"ride-sharing-backend/src"
 )
 
+var redisClient *redis.Client
+
 func TestRequestRide(t *testing.T) {
+
+    InitRedis()
+    InitDB()
+    initAuth()
+    
 	// Mock Redis and DB
 	redisClient = redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	defer redisClient.Close()

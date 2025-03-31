@@ -5,11 +5,18 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"strings"
+	
 )
 
 func TestLoginHandler(t *testing.T) {
+	src.TestSetup()
+	
 	// Setup
 	os.Setenv("JWT_SECRET", "testsecret")
+
+	InitRedis()
+	InitDB()
 	initAuth()
 
 	reqBody := `{"username":"testuser","user_id":123,"role":"rider"}`

@@ -4,9 +4,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"strings"
+
+	"ride-sharing-backend/src"
 )
 
 func TestListDrivers(t *testing.T) {
+
+    InitRedis()
+	InitDB()
+	initAuth()
+	
 	// Cache a mock driver
 	CacheDriverLocation("driver1", 0.3135, 32.5811)
 

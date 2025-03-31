@@ -4,9 +4,16 @@ import (
     "net/http"
     "testing"
     "time"
+
+    "ride-sharing-backend/src"
 )
 
 func BenchmarkRequestRide(b *testing.B) {
+
+    InitRedis()
+    InitDB()
+    initAuth()
+    
     client := &http.Client{}
     req, _ := http.NewRequest("POST", "http://localhost:8080/request-ride", 
         strings.NewReader(`{"lat":0.3135,"lng":32.5811}`))
